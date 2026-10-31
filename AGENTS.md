@@ -1,0 +1,14 @@
+# OpenSprite tracker
+
+- Develop one shared whole-body policy for the three selected OrangeDuck LAFAN motions. Keep each source trajectory and its time axis distinct. Do not concatenate references across motion boundaries.
+- The user explicitly requires strict OpenSprite adaptation of UMR. The production retarget path must use genuine learned human/robot surface correspondence and UMR optimization with newly generated OpenSprite samples/configuration. Task-space IK is a diagnostic baseline, never a substitute described as UMR. Do not reuse X2 correspondence slots, point clouds, poses, limits or physical assumptions.
+- This repository is standalone: all project source, robot assets, motion data and launch configuration must be repository-owned. `.reference/` is ignored research material only; no runtime imports, symlinks, editable dependencies or path fallbacks to sibling checkouts.
+- OpenSprite's official model defines its topology, joint axes, hard limits and inertials. X2 supplies algorithm implementations, never robot physical constants. Preserve upstream licenses.
+- Treat Sprite as a new robot throughout: all 31 joints and 32 link frames are explicit; both waist joints and all three head joints must participate. Use per-joint actuator state/context. The user's latest explicit instruction requires the same command delay and first-order torque lag model as X2, including its parameters and tick timing; implement it with OpenSprite's own joint mapping, gains and official effort limits. This overrides the earlier proposed zero-lag default. Validate real and imagined actuator timing consistently.
+- Retain legitimate lying, falling and getting-up poses. Do not introduce an upright termination or blanket body-ground prohibition.
+- Keep raw sources unchanged. Record retargeting coordinate conventions, resampling and solver/postprocessing choices. Compute FK and velocities per trajectory before combining the motion library.
+- Use a single policy with continuous windows inside one motion during training; evaluate each complete source from its first frame without resets or reference wrapping. Distinguish a short diagnostic from complete-motion success.
+- Formal runs use committed, fixed source snapshots, named output directories, checkpoints and resumable commands. This repo has no remote configured initially; local commits suffice unless a remote is supplied.
+- The user authorized at most 12 hours of local GPU training, including training pilots. Review at least hourly, retain checkpoints before corrections, and do not affect unrelated local processes.
+- Record substantive decisions and cross-review findings in `docs/plan/`. Keep focused checks for topology, motion boundaries, environment stepping, gradients and resume behavior.
+

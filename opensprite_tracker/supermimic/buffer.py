@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: MIT
+# Adapted from supermimic_vibed (SuperMimic independent implementation).
+# Copyright (c) 2026 ETH Zurich, Chong Zhang
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+"""Dynamic-shape (time, env) replay for real, pre-reset transitions.
+
+done denotes any reset boundary (termination OR timeout), used only to prevent
+windows/history crossing resets. It is NOT a critic death label. Optional
+extra_fields can retain separate term/timeout labels without conflating them.
+s1 must be the state BEFORE autoreset, including that transition's memory.
+"""
+
+import torch
+
+
+class ReplayBuffer:
+    def __init__(self, T, N, device, *, state_dim=75, action_dim=31,
+                 context_dim=0, extra_fields=None):
+        if T < 1 or N < 1 or state_dim < 1 or action_dim < 1 or context_dim < 0:
+            raise ValueError("invalid replay dimensions")
+        self.T, self.N, self.device = T, N, device
+        self.state_dim, self.action_dim, self.context_dim = state_dim, action_dim, context_dim
+        self.fields = {
+            "s": (state_dim, torch.float32),
+            "s1": (state_dim, torch.float32),
+            "a": (action_dim, torch.float32),
+            "a_prev": (action_dim, torch.float32),
+            "xi": (context_dim, torch.float32),
+            "r": ((), torch.float32),
+            "f": ((), torch.long),
+            "ep_step": ((), torch.int32),
+            "done": ((), torch.bool),
+        }
+        if extra_fields:
+            if self.fields.keys() & extra_fields.keys():
+                raise ValueError("extra_fields must not override required replay fields")
+            self.fields.update(extra_fields)
+        self.data = {}
+        for key, (shape, dtype) in self.fields.items():
+            shape = (shape,) if isinstance(shape, int) else tuple(shape)
+            self.data[key] = torch.zeros((T, N) + shape, device=device, dtype=dtype)
+        self.ptr = self.size = 0
+
+    @torch.no_grad()
+    def add(self, transition):
+        # Validate all fields before changing a row; never store an autograd graph.
+        for key, storage in self.data.items():
+            if transition[key].shape != storage.shape[1:]:
+                raise ValueError(f"{key}: expected {storage.shape[1:]}, got {transition[key].shape}")
+        for key, storage in self.data.items():
+            storage[self.ptr].copy_(transition[key])
+        self.ptr = (self.ptr+1) % self.T
+        self.size = min(self.size+1, self.T)
+
+    def _row(self, age):
+        return (self.ptr-self.size+age) % self.T
+
+    def sample_windows(self, B, k):
+        if B < 1 or k < 1 or self.size < k:
+            raise ValueError(f"need a positive batch and at least k={k} replay rows, have {self.size}")
+        age0 = torch.randint(self.size-k+1, (B,), device=self.device)
+        env = torch.randint(self.N, (B,), device=self.device)
+        rows = self._row(age0[:, None] + torch.arange(k, device=self.device))
+        envs = env[:, None].expand_as(rows)
+        out = {key: storage[rows, envs] for key, storage in self.data.items()}
+        # Include the terminal transition itself, exclude its post-reset successors.
+        continuation = 1-out["done"].float()
+        out["mask"] = torch.cat((torch.ones_like(continuation[:, :1]), continuation[:, :-1]), -1).cumprod(-1)
+        return out
+
+    def sample_starts(self, B, hist):
+        if self.size < 1 or B < 1 or hist < 1:
+            raise ValueError("need nonempty replay, positive batch and history")
+        age = torch.randint(self.size, (B,), device=self.device)
+        env = torch.randint(self.N, (B,), device=self.device)
+        row = self._row(age)
+        episode_age = self.data["ep_step"][row, env].long()
+        back = torch.arange(hist-1, -1, -1, device=self.device)[None]
+        back = torch.minimum(torch.minimum(back, episode_age[:, None]), age[:, None])
+        rows = self._row(age[:, None]-back)
+        envs = env[:, None].expand_as(rows)
+        keys = ("s", "a_prev", "xi", "f", "ep_step")
+        start = {key: self.data[key][row, env] for key in keys}
+        history = {key: self.data[key][rows, envs] for key in keys}
+        return start, history

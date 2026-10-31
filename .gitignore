@@ -1,0 +1,16 @@
+.reference/
+.venv/
+.venv-umr/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+outputs/
+MUJOCO_LOG.TXT
+*.egg-info/
+
+
+# Locally generated motion derivatives and correspondence assets
+data/motions/
+assets/umr_correspondence/

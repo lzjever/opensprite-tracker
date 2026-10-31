@@ -1,0 +1,64 @@
+{
+  "robot": {
+    "name": "opensprite0825",
+    "slot_name": "opensprite0825",
+    "xml": "../../assets/opensprite/retarget_scene.xml",
+    "point_cloud_center": "body:pelvis_link",
+    "sample_point_cloud_center": "body:pelvis_link",
+    "visual_geom_policy": "visual",
+    "to_smpl_frame": true,
+    "sample_pose": "tpose",
+    "tpose_qpos": {
+      "left_shoulder_roll_joint": 1.5707963267948966,
+      "right_shoulder_roll_joint": -1.5707963267948966
+    },
+    "frame_transform": {
+      "smpl_to_robot_root_matrix": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ]
+      ]
+    }
+  },
+  "correspondence": {
+    "smpl_name": "geno",
+    "slots_field": "reconstructed_slots",
+    "dataset": {
+      "smpl_center": "pelvis",
+      "num_points": 4096,
+      "seed": 0,
+      "surface_oversample_ratio": 8,
+      "surface_curvature_weight": 0,
+      "surface_curvature_power": 1,
+      "exterior_surface": true,
+      "exterior_method": "first_hit",
+      "exterior_ray_distance": 0
+    },
+    "train": {
+      "template_name": "geno",
+      "template_sort": "y_z_x",
+      "normalize": "per_sample_height"
+    }
+  },
+  "solver": {
+    "ground_penetration_hard_constraint_mode": "mujoco_collision",
+    "pose_init_iters": 160,
+    "iters": 3
+  },
+  "view": {
+    "enabled": false,
+    "play": false
+  }
+}

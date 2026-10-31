@@ -1,0 +1,22 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.8.0+cu128
+numpy==1.26.4
+scipy==1.17.1
+mujoco==3.3.7
+py-soma-x==0.3.0
+warp-lang==1.17.0
+clarabel==0.11.1
+cholespy==2.2.0
+trimesh==5.1.0
+embreex==4.4.0
+smplx @ git+https://github.com/ZhengyiLuo/smplx.git@a5b8e4ac14f79f3f33fd2cf2a16e6f507146b813
+imageio-ffmpeg==0.6.0
+Pillow==12.3.0
+httpx[socks]==0.28.1
+huggingface-hub==1.31.0
+PyYAML==6.0.3
+rtree==1.4.1
+joblib==1.6.0
+tqdm==4.70.0
+osqp==1.1.3
