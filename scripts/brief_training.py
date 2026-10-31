@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--run-dir', default='outputs/train/opensprite-umr-lafan3-supermimic-20261031')
+parser.add_argument('--run-dir', help='defaults to configs/training.json run_dir')
 args = parser.parse_args()
-run = Path(args.run_dir)
+run = Path(args.run_dir or json.loads(Path("configs/training.json").read_text())["run_dir"])
 state = json.loads((run / 'supervisor.json').read_text())
 result = {k: state.get(k) for k in ('status', 'pid', 'restarts', 'returncode')}
 result['campaign_hours'] = round(state.get('active_seconds', 0) / 3600, 4)

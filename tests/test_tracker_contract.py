@@ -10,15 +10,17 @@ from opensprite_tracker.supermimic.networks import Policy, WorldModel
 from opensprite_tracker.supermimic.state import flatten_state, unflatten_state
 
 
-def test_source_policy_architecture_uses_sprite_dimensions():
+def test_paper_policy_architecture_uses_sprite_dimensions():
     actor = Policy(obs_dim=105, goal_dim=770, action_dim=31)
     assert [m.out_features for m in actor.enc if isinstance(m, torch.nn.Linear)] == [
+        2048,
         1024,
         512,
         256,
         32,
     ]
     assert [m.out_features for m in actor.dec if isinstance(m, torch.nn.Linear)] == [
+        2048,
         1024,
         512,
         256,

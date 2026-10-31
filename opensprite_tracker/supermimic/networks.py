@@ -102,7 +102,7 @@ class WorldModel(nn.Module):
 
     def __init__(
         self,
-        hidden: Sequence[int] = (768, 768, 768),
+        hidden: Sequence[int] = (2048, 2048, 2048),
         *,
         num_joints: int = NUM_J,
         action_dim: int | None = None,
@@ -210,7 +210,7 @@ class Policy(nn.Module):
         z_dim=32,
         *,
         action_dim=NUM_J,
-        hidden=(1024, 512, 256),
+        hidden=(2048, 1024, 512, 256),
         encoder_hidden=None,
         decoder_hidden=None,
     ):

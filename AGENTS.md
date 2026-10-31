@@ -9,6 +9,6 @@
 - Keep raw sources unchanged. Record retargeting coordinate conventions, resampling and solver/postprocessing choices. Compute FK and velocities per trajectory before combining the motion library.
 - Use a single policy with continuous windows inside one motion during training; evaluate each complete source from its first frame without resets or reference wrapping. Distinguish a short diagnostic from complete-motion success.
 - Formal runs use committed, fixed source snapshots, named output directories, checkpoints and resumable commands. This repo has no remote configured initially; local commits suffice unless a remote is supplied.
-- The user authorized at most 12 hours of local GPU training, including training pilots. Review at least hourly, retain checkpoints before corrections, and do not affect unrelated local processes.
+- The user explicitly granted a NEW 12-hour GPU training budget on 2026-11-01 for restarting at the official SuperMimic paper scale. Keep the stopped earlier campaign and its time separately; all setup/compile/pilots/recovery for this new campaign share its 43200-second cap. Ordinary resumes never refresh it. Review at least hourly, retain checkpoints before corrections, and do not affect unrelated local processes.
 - Record substantive decisions and cross-review findings in `docs/plan/`. Keep focused checks for topology, motion boundaries, environment stepping, gradients and resume behavior.
 

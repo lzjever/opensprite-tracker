@@ -26,6 +26,10 @@ done denotes any reset boundary (termination OR timeout), used only to prevent
 windows/history crossing resets. It is NOT a critic death label. Optional
 extra_fields can retain separate term/timeout labels without conflating them.
 s1 must be the state BEFORE autoreset, including that transition's memory.
+
+``device`` is the learner/sample destination. Optional ``storage_device``
+places the replay and its sampling indices elsewhere, e.g. pageable CPU RAM.
+Only gathered samples move to the learner; the complete replay never does.
 """
 
 import torch
@@ -33,10 +37,11 @@ import torch
 
 class ReplayBuffer:
     def __init__(self, T, N, device, *, state_dim=75, action_dim=31,
-                 context_dim=0, extra_fields=None):
+                 context_dim=0, extra_fields=None, storage_device=None):
         if T < 1 or N < 1 or state_dim < 1 or action_dim < 1 or context_dim < 0:
             raise ValueError("invalid replay dimensions")
         self.T, self.N, self.device = T, N, device
+        self.storage_device = torch.device(device if storage_device is None else storage_device)
         self.state_dim, self.action_dim, self.context_dim = state_dim, action_dim, context_dim
         self.fields = {
             "s": (state_dim, torch.float32),
@@ -56,7 +61,7 @@ class ReplayBuffer:
         self.data = {}
         for key, (shape, dtype) in self.fields.items():
             shape = (shape,) if isinstance(shape, int) else tuple(shape)
-            self.data[key] = torch.zeros((T, N) + shape, device=device, dtype=dtype)
+            self.data[key] = torch.zeros((T, N) + shape, device=self.storage_device, dtype=dtype)
         self.ptr = self.size = 0
 
     @torch.no_grad()
@@ -66,7 +71,9 @@ class ReplayBuffer:
             if transition[key].shape != storage.shape[1:]:
                 raise ValueError(f"{key}: expected {storage.shape[1:]}, got {transition[key].shape}")
         for key, storage in self.data.items():
-            storage[self.ptr].copy_(transition[key])
+            # Blocking cross-device copies make the complete row visible before
+            # ptr/size advance. Do not pin the entire multi-GiB CPU replay.
+            storage[self.ptr].copy_(transition[key], non_blocking=False)
         self.ptr = (self.ptr+1) % self.T
         self.size = min(self.size+1, self.T)
 
@@ -76,11 +83,11 @@ class ReplayBuffer:
     def sample_windows(self, B, k):
         if B < 1 or k < 1 or self.size < k:
             raise ValueError(f"need a positive batch and at least k={k} replay rows, have {self.size}")
-        age0 = torch.randint(self.size-k+1, (B,), device=self.device)
-        env = torch.randint(self.N, (B,), device=self.device)
-        rows = self._row(age0[:, None] + torch.arange(k, device=self.device))
+        age0 = torch.randint(self.size-k+1, (B,), device=self.storage_device)
+        env = torch.randint(self.N, (B,), device=self.storage_device)
+        rows = self._row(age0[:, None] + torch.arange(k, device=self.storage_device))
         envs = env[:, None].expand_as(rows)
-        out = {key: storage[rows, envs] for key, storage in self.data.items()}
+        out = {key: storage[rows, envs].to(self.device) for key, storage in self.data.items()}
         # Include the terminal transition itself, exclude its post-reset successors.
         continuation = 1-out["done"].float()
         out["mask"] = torch.cat((torch.ones_like(continuation[:, :1]), continuation[:, :-1]), -1).cumprod(-1)
@@ -89,15 +96,15 @@ class ReplayBuffer:
     def sample_starts(self, B, hist):
         if self.size < 1 or B < 1 or hist < 1:
             raise ValueError("need nonempty replay, positive batch and history")
-        age = torch.randint(self.size, (B,), device=self.device)
-        env = torch.randint(self.N, (B,), device=self.device)
+        age = torch.randint(self.size, (B,), device=self.storage_device)
+        env = torch.randint(self.N, (B,), device=self.storage_device)
         row = self._row(age)
         episode_age = self.data["ep_step"][row, env].long()
-        back = torch.arange(hist-1, -1, -1, device=self.device)[None]
+        back = torch.arange(hist-1, -1, -1, device=self.storage_device)[None]
         back = torch.minimum(torch.minimum(back, episode_age[:, None]), age[:, None])
         rows = self._row(age[:, None]-back)
         envs = env[:, None].expand_as(rows)
         keys = ("s", "a_prev", "xi", "f", "ep_step")
-        start = {key: self.data[key][row, env] for key in keys}
-        history = {key: self.data[key][rows, envs] for key in keys}
+        start = {key: self.data[key][row, env].to(self.device) for key in keys}
+        history = {key: self.data[key][rows, envs].to(self.device) for key in keys}
         return start, history

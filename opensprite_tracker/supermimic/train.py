@@ -64,14 +64,14 @@ def parser():
     p.add_argument("--save-every-seconds", type=float, default=600.0)
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--num-envs", type=int, default=2048)
+    p.add_argument("--num-envs", type=int, default=4096)
     p.add_argument(
         "--iterations",
         type=int,
-        default=15000,
+        default=320000,
         help="absolute end iteration for this runner",
     )
-    p.add_argument("--buffer-steps", type=int, default=500)
+    p.add_argument("--buffer-steps", type=int, default=1000)
     p.add_argument("--utd", type=float, default=0.4)
     p.add_argument("--horizon", type=int, default=32)
     p.add_argument("--goal-frames", type=int, default=10)
@@ -79,9 +79,14 @@ def parser():
     p.add_argument("--wm-window", type=int, default=8)
     p.add_argument("--wm-batches", type=int, default=10)
     p.add_argument("--wm-batch", type=int, default=2048)
-    p.add_argument("--pi-batch", type=int, default=1024)
-    p.add_argument("--wm-width", type=int, default=768)
-    p.add_argument("--policy-hidden", type=int, nargs="+", default=[1024, 512, 256])
+    p.add_argument("--pi-batch", type=int, default=4096)
+    p.add_argument("--wm-width", type=int, default=2048)
+    p.add_argument("--wm-microbatch", type=int, default=256, help="gradient accumulation within the full logical WM batch; 0 disables")
+    p.add_argument("--pi-microbatch", type=int, default=128, help="gradient accumulation within the full logical imagined rollout batch; 0 disables")
+    p.add_argument("--critic-microbatch", type=int, default=8192, help="gradient accumulation within each logical critic minibatch; 0 disables")
+    p.add_argument("--critic-storage", choices=["cpu", "cuda"], default="cpu")
+    p.add_argument("--replay-device", choices=["cpu", "cuda"], default="cpu", help="storage only; sampled transitions are returned to --device")
+    p.add_argument("--policy-hidden", type=int, nargs="+", default=[2048, 1024, 512, 256])
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--lam", type=float, default=0.95)
@@ -89,11 +94,11 @@ def parser():
     p.add_argument("--critic-epochs", type=int, default=5)
     p.add_argument("--critic-minibatches", type=int, default=4)
     p.add_argument("--warmup-steps", type=int, default=64)
-    p.add_argument("--wm-only-iters", type=int, default=500)
+    p.add_argument("--wm-only-iters", type=int, default=0)
     p.add_argument("--lr-decay-iters", type=int, default=250000)
     p.add_argument("--save-every", type=int, default=1000)
     p.add_argument("--log-every", type=int, default=50)
-    p.add_argument("--amp", choices=["none", "bf16"], default="bf16")
+    p.add_argument("--amp", choices=["none", "bf16"], default="none")
     p.add_argument("--compile", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--resume", type=Path)
     p.add_argument(
@@ -201,6 +206,7 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     networks.AMP_DTYPE = torch.bfloat16 if args.amp == "bf16" else None
@@ -260,6 +266,7 @@ def main():
         state_dim=75 + MEM_DIM,
         context_dim=CONTEXT_DIM,
         extra_fields=extras,
+        storage_device=args.replay_device,
     )
     learner = Learner(
         wm,
@@ -507,7 +514,7 @@ def main():
             >= args.max_wall_seconds
         )
         stopping = stop_requested or budget_stop
-        if (it + 1) % args.log_every == 0 or it + 1 == args.iterations or stopping:
+        if it == start or (it + 1) % args.log_every == 0 or it + 1 == args.iterations or stopping:
             now = time.monotonic()
             values = {
                 key: float(value / stats_count[key]) for key, value in stats.items()
@@ -573,7 +580,8 @@ def main():
             and time.monotonic() - last_save >= args.save_every_seconds
         )
         if (
-            (it + 1) % args.save_every == 0
+            it == start
+            or (it + 1) % args.save_every == 0
             or it + 1 == args.iterations
             or timed_save
             or stopping

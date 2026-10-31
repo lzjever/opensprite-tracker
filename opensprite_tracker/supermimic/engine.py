@@ -105,34 +105,48 @@ class Learner:
             torch.stack([s[i] for s in predictions], 1) for i in range(len(state))
         )
 
+    @staticmethod
+    def _chunks(total, requested):
+        size = requested if requested and requested > 0 else total
+        return (slice(start, min(start + size, total)) for start in range(0, total, size))
+
     def wm_update(self):
-        window = self.buffer.sample_windows(self.args.wm_batch, self.args.wm_window)
-        prediction = self.wm_rollout(window["s"], window["a"], window["xi"])
+        # One sampled logical batch and one Adam step, regardless of partition.
+        batch = self.args.wm_batch
+        window = self.buffer.sample_windows(batch, self.args.wm_window)
         scale = torch.maximum(self.wm.out_norm.std(), self.error_floor)
-        error = (
-            (self.wm.state_error(prediction, unflatten_state(window["s1"])) / scale)
-            .square()
-            .mean(-1)
-        )
-        mask = window["mask"]
-        loss = (error * mask).sum() / self.args.wm_batch
         self.opt_wm.zero_grad(set_to_none=True)
-        loss.backward()
+        loss_sum = scale.new_zeros(())
+        valid_error, valid_count, last_error, last_count = [scale.new_zeros(()) for _ in range(4)]
+        for chunk in self._chunks(batch, getattr(self.args, "wm_microbatch", 0)):
+            part = {key: value[chunk] for key, value in window.items()}
+            prediction = self.wm_rollout(part["s"], part["a"], part["xi"])
+            error = (
+                (self.wm.state_error(prediction, unflatten_state(part["s1"])) / scale)
+                .square().mean(-1)
+            )
+            mask = part["mask"]
+            loss = (error * mask).sum() / batch
+            loss.backward()
+            loss_sum += loss.detach()
+            valid_error += (error.detach() * mask).sum()
+            valid_count += mask.sum()
+            last_error += (error[:, -1].detach() * mask[:, -1]).sum()
+            last_count += mask[:, -1].sum()
         norm = nn.utils.clip_grad_norm_(self.wm.parameters(), 1.0)
         if not torch.isfinite(norm):
             raise RuntimeError("Nonfinite world-model gradient; no update applied")
         self.opt_wm.step()
-        last = (error[:, -1].detach() * mask[:, -1]).sum() / mask[
-            :, -1
-        ].sum().clamp_min(1)
         self.last_model_metrics = {
-            "last_step_valid_fraction": mask[:, -1].mean().detach(),
-            "error_per_valid_transition": (error.detach() * mask).sum()
-            / mask.sum().clamp_min(1),
+            "last_step_valid_fraction": last_count / batch,
+            "error_per_valid_transition": valid_error / valid_count.clamp_min(1),
         }
         if self.transition_model is not None:
+            # Small independent cost heads still see the complete logical batch;
+            # their bootstrap membership and per-head valid-count denominator are
+            # therefore drawn/computed once, not independently per microbatch.
             self._transition_update(window)
-        return (loss.detach() / self.args.wm_window, last)
+        return loss_sum / self.args.wm_window, last_error / last_count.clamp_min(1)
 
     def _transition_update(self, window):
         """Actual substep measurements supervise both independent small heads.
@@ -254,34 +268,19 @@ class Learner:
                 return cat(starts), cat(histories)
         raise RuntimeError("Replay has no valid H-step motion starts")
 
-    def policy_update(self):
+    def _policy_rollout(self, start, history):
+        """One BPTT partition; frozen model weights retain all state derivatives."""
         args = self.args
-        start, history = self.sample_valid_starts()
         state = initial_state = unflatten_state(start["s"])
         frame, xi, previous = start["f"], start["xi"], start["a_prev"]
         xi_n = self.normalize_xi(xi)
         with torch.no_grad():
             obs_history = self.mdp.add_noise(
-                self.mdp.obs(
-                    unflatten_state(history["s"]),
-                    history["a_prev"],
-                    history["xi"],
-                    history["f"],
-                )
+                self.mdp.obs(unflatten_state(history["s"]), history["a_prev"],
+                             history["xi"], history["f"])
             )
         goal = initial_goal = self.motion.goal(frame, args.goal_frames)
-        set_grad(self.wm, False)
-        set_grad(self.critic, False)
-        if self.transition_model is not None:
-            set_grad(self.transition_model, False)
-        states, actions, previous_actions, frames, goals, pre_states = (
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-        )
+        states, actions, previous_actions, frames, goals, pre_states = [], [], [], [], [], []
         for _ in range(args.horizon):
             pre_states.append(state)
             previous_actions.append(previous)
@@ -293,92 +292,150 @@ class Learner:
             frames.append(frame)
             goals.append(goal)
         flatten_time = lambda xs: torch.stack(xs).flatten(0, 1)
-        all_states = tuple(
-            flatten_time([s[i] for s in states]) for i in range(len(state))
-        )
+        all_states = tuple(flatten_time([s[i] for s in states]) for i in range(len(state)))
         if self.transition_model is None:
             rewards, deaths = self.reward_term(
-                all_states,
-                flatten_time(frames),
-                flatten_time(actions),
-                flatten_time(previous_actions),
+                all_states, flatten_time(frames), flatten_time(actions), flatten_time(previous_actions)
             )
         else:
-            all_before = tuple(
-                flatten_time([s[i] for s in pre_states]) for i in range(len(state))
-            )
+            all_before = tuple(flatten_time([s[i] for s in pre_states]) for i in range(len(state)))
             context = xi[None].expand(args.horizon, -1, -1).flatten(0, 1)
-            age = (
-                start["ep_step"][None]
-                + torch.arange(1, args.horizon + 1, device=xi.device)[:, None]
-            ).flatten()
+            age = (start["ep_step"][None]
+                   + torch.arange(1, args.horizon + 1, device=xi.device)[:, None]).flatten()
             rewards, deaths = self.reward_term(
-                all_before,
-                all_states,
-                flatten_time(frames),
-                flatten_time(actions),
-                flatten_time(previous_actions),
-                context,
-                age,
+                all_before, all_states, flatten_time(frames), flatten_time(actions),
+                flatten_time(previous_actions), context, age,
             )
         rewards, deaths = rewards.view(args.horizon, -1), deaths.view(args.horizon, -1)
-        # Frozen critic WEIGHTS, but tail state's derivative stays in the graph.
+        # clip_end is inclusive: arriving at its final frame earns that
+        # transition's reward, then ends continuation and tail bootstrapping.
+        # This boundary is independent of legitimate lying/physical survival.
+        rollout_frames = torch.stack(frames)
+        source_end = self.motion.clip_end[self.motion.clip_id[rollout_frames]]
+        deaths = torch.where(rollout_frames >= source_end, torch.ones_like(deaths), deaths)
         tail = self.critic(self.critic_input(state, frame, xi_n, goal))
-        objective, alive_now, alive_next = actor_return(
-            rewards, deaths, tail, args.gamma
-        )
-        loss = -objective.mean()
-        self.opt_pi.zero_grad(set_to_none=True)
-        loss.backward()
-        norm = nn.utils.clip_grad_norm_(self.pi.parameters(), 1.0)
-        nn.utils.clip_grad_value_(self.pi.parameters(), 0.1)
-        if not torch.isfinite(norm):
-            raise RuntimeError("Nonfinite actor gradient; no update applied")
-        self.opt_pi.step()
-        set_grad(self.wm, True)
-        set_grad(self.critic, True)
-        if self.transition_model is not None:
-            set_grad(self.transition_model, True)
-        # Critic learns from the SAME imagined transitions. Targets are detached
-        # once, not recomputed after each minibatch with newly updated weights.
+        objective, alive_now, alive_next = actor_return(rewards, deaths, tail, args.gamma)
+        # Construct critic features from these SAME trajectories before freeing
+        # this partition's graph. The full logical batch norm is updated later.
         with torch.no_grad():
             critic_states = tuple(
-                torch.cat(
-                    (
-                        initial_state[i][None],
-                        torch.stack([s[i].detach() for s in states]),
-                    )
-                ).flatten(0, 1)
-                for i in range(len(state))
+                torch.cat((initial_state[i][None], torch.stack([s[i].detach() for s in states])))
+                .flatten(0, 1) for i in range(len(state))
             )
             critic_frames = torch.cat((start["f"][None], torch.stack(frames))).flatten()
-            critic_goals = torch.cat((initial_goal[None], torch.stack(goals))).flatten(
-                0, 1
-            )
+            critic_goals = torch.cat((initial_goal[None], torch.stack(goals))).flatten(0, 1)
             context = xi_n[None].expand(args.horizon + 1, -1, -1).flatten(0, 1)
-            X = self.critic_input(critic_states, critic_frames, context, critic_goals)
-            X = X.view(args.horizon + 1, args.pi_batch, -1)
-            self.critic.norm.update(X)
-            values = self.critic(X)
+            features = self.critic_input(critic_states, critic_frames, context, critic_goals)
+            features = features.view(args.horizon + 1, len(frame), -1)
+        return objective, alive_now, alive_next, rewards, deaths, features, torch.stack(actions).detach().abs().amax()
+
+    @staticmethod
+    @torch.no_grad()
+    def _update_full_norm(norm, features):
+        """One logical-batch RunningNorm update, even with host critic storage.
+
+        Compute one population mean/variance over every time and rollout row.
+        Moving only sufficient statistics preserves the RunningNorm equations
+        without uploading the entire ~0.8 GB critic dataset to the GPU.
+        """
+        if norm.count >= norm.max_count:
+            return
+        x = features.reshape(-1, norm.mean.numel()).to(dtype=norm.mean.dtype)
+        if len(x) == 0:
+            return
+        variance, mean = torch.var_mean(x, dim=0, unbiased=False)
+        mean, variance = mean.to(norm.mean.device), variance.to(norm.var.device)
+        n = len(x)
+        total = norm.count + n
+        delta = mean - norm.mean
+        new_var = (norm.var * norm.count + variance * n
+                   + delta.square() * norm.count * n / total) / total
+        norm.mean.add_(delta * n / total)
+        norm.var.copy_(new_var)
+        norm.count.copy_(total)
+
+    def _critic_update(self, X, rewards, deaths):
+        args = self.args
+        device = next(self.critic.parameters()).device
+        # Exactly one normalization update over all (H+1)*logical_batch rows,
+        # followed by fixed pre-update values and lambda targets for all epochs.
+        with torch.no_grad():
+            self._update_full_norm(self.critic.norm, X)
+            flat = X.flatten(0, 1)
+            values = torch.empty(X.shape[:2], device=X.device, dtype=X.dtype)
+            for chunk in self._chunks(len(flat), getattr(args, "critic_microbatch", 0)):
+                values.view(-1)[chunk] = self.critic(flat[chunk].to(device)).to(X.device)
             targets = lambda_returns(rewards, deaths, values, args.gamma, args.lam)
         Xf, Yf = X[:-1].flatten(0, 1), targets.flatten()
-        critic_loss = torch.zeros((), device=X.device)
+        critic_loss = torch.zeros((), device=device)
         for _ in range(args.critic_epochs):
-            indices = torch.randperm(len(Yf), device=X.device)
+            # A global shuffle, never an independent shuffle per actor partition.
+            indices = torch.randperm(len(Yf), device=device).to(X.device)
             for idx in indices.tensor_split(args.critic_minibatches):
-                critic_loss = (self.critic(Xf[idx]) - Yf[idx]).square().mean()
                 self.opt_v.zero_grad(set_to_none=True)
-                critic_loss.backward()
+                critic_loss = torch.zeros((), device=device)
+                for chunk in self._chunks(len(idx), getattr(args, "critic_microbatch", 0)):
+                    part = idx[chunk]
+                    loss = (self.critic(Xf[part].to(device)) - Yf[part].to(device)).square().sum() / len(idx)
+                    loss.backward()
+                    critic_loss += loss.detach()
                 vnorm = nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
                 if not torch.isfinite(vnorm):
                     raise RuntimeError("Nonfinite critic gradient")
                 self.opt_v.step()
+        return critic_loss
+
+    def policy_update(self):
+        args = self.args
+        # Draw the complete logical batch ONCE. Each partition contributes its
+        # sum divided by the SAME logical denominator before one optimizer step.
+        start, history = self.sample_valid_starts()
+        batch = args.pi_batch
+        device = next(self.pi.parameters()).device
+        storage = torch.device("cpu") if getattr(args, "critic_storage", "device") == "cpu" else device
+        loss_sum, reward_sum, survival_sum, action_peak = [torch.zeros((), device=device) for _ in range(4)]
+        critic_data = None
+        self.opt_pi.zero_grad(set_to_none=True)
+        frozen = [self.wm, self.critic] + ([self.transition_model] if self.transition_model is not None else [])
+        for module in frozen:
+            set_grad(module, False)
+        try:
+            for chunk in self._chunks(batch, getattr(args, "pi_microbatch", 0)):
+                part_start = {key: value[chunk] for key, value in start.items()}
+                part_history = {key: value[chunk] for key, value in history.items()}
+                objective, alive_now, alive_next, rewards, deaths, features, peak = self._policy_rollout(part_start, part_history)
+                loss = -objective.sum() / batch
+                loss.backward()
+                loss_sum += loss.detach()
+                reward_sum += (alive_now * rewards).detach().sum() / (args.horizon * batch)
+                survival_sum += alive_next[-1].detach().sum() / batch
+                action_peak = torch.maximum(action_peak, peak)
+                if critic_data is None:
+                    X = torch.empty((args.horizon + 1, batch, features.shape[-1]), device=storage, dtype=features.dtype)
+                    R = torch.empty((args.horizon, batch), device=storage, dtype=rewards.dtype)
+                    D = torch.empty_like(R)
+                    critic_data = X, R, D
+                X, R, D = critic_data
+                with torch.no_grad():
+                    X[:, chunk].copy_(features.detach())
+                    R[:, chunk].copy_(rewards.detach())
+                    D[:, chunk].copy_(deaths.detach())
+                # Do not retain the previous partition's autograd graph.
+                del objective, alive_now, alive_next, rewards, deaths, features, loss
+            norm = nn.utils.clip_grad_norm_(self.pi.parameters(), 1.0)
+            nn.utils.clip_grad_value_(self.pi.parameters(), 0.1)
+            if not torch.isfinite(norm):
+                raise RuntimeError("Nonfinite actor gradient; no update applied")
+            self.opt_pi.step()
+        finally:
+            for module in frozen:
+                set_grad(module, True)
+        critic_loss = self._critic_update(*critic_data)
         return {
-            "actor_loss": loss.detach(),
-            "critic_loss": critic_loss.detach(),
-            "imagined_reward": (alive_now * rewards).detach().mean()
-            / self.mdp.reward_scale,
+            "actor_loss": loss_sum,
+            "critic_loss": critic_loss,
+            "imagined_reward": reward_sum / self.mdp.reward_scale,
             "actor_grad_norm": norm.detach(),
-            "imagined_survival": alive_next[-1].detach().mean(),
-            "action_peak": torch.stack(actions).detach().abs().amax(),
+            "imagined_survival": survival_sum,
+            "action_peak": action_peak,
         }
