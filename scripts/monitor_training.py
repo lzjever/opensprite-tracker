@@ -33,7 +33,7 @@ def latest_checkpoint(run):
 
 def with_resume(command, checkpoint, elapsed):
     command = list(command)
-    for key in ("--resume", "--resume-runtime-seconds-floor"):
+    for key in ("--resume", "--resume-runtime-seconds-floor", "--initialize-from", "--world-model-from"):
         while key in command:
             index = command.index(key)
             del command[index:index+2]

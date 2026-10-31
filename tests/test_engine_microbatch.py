@@ -37,6 +37,9 @@ class Mdp:
     def soft_termination(self, state, frame):
         return torch.sigmoid((0.2 - state[0][..., 2]) * 3)
 
+    def termination(self, state, frame):
+        return state[0][..., 2] < 0.3
+
     def critic_features(self, state, frame, xi):
         return torch.cat((state[0], state[2], state[4][..., :4], xi), -1)
 
@@ -165,3 +168,103 @@ def test_final_source_frame_keeps_arrival_reward_but_has_no_tail_bootstrap(monke
     discount = learner.args.gamma ** torch.arange(learner.args.horizon)
     torch.testing.assert_close(objective[-1], (discount * alive_now[:, -1] * rewards[:, -1]).sum())
     assert torch.autograd.grad(objective[-1], tail)[0].item() == 0
+
+
+def test_heldout_diagnostics_are_eager_masked_per_clip_and_do_not_update_state(monkeypatch):
+    learner = make_learner(True)
+    learner.motion.clip_id = torch.cat((torch.zeros(32, dtype=torch.long),
+                                      torch.ones(32, dtype=torch.long),
+                                      torch.full((64,), 2, dtype=torch.long)))
+    learner.motion.clip_end = torch.tensor([31, 63, 127])
+    batch = 3
+    window = {"s": flat_state(batch, 8), "s1": flat_state(batch, 8),
+              "a": torch.randn(batch, 8, 31), "xi": torch.randn(batch, 8, 2),
+              "f": torch.tensor([0, 40, 80])[:, None] + torch.arange(8),
+              "mask": torch.tensor([[1.] * 8, [1.] * 8, [1.] + [0.] * 7])}
+    # Invalid post-reset labels must not poison valid horizon-eight statistics.
+    window["s1"][2, 7] = torch.nan
+    before = {name: value.clone() for name, value in learner.wm.state_dict().items()}
+    optimizer_before = learner.opt_wm.state_dict()
+    calls = []
+    original = learner.wm.step
+
+    def step(*args):
+        calls.append(torch.is_grad_enabled())
+        return original(*args)
+
+    monkeypatch.setattr(learner.wm, "step", step)
+    monkeypatch.setattr(learner, "wm_rollout", lambda *args: pytest.fail("Compiled fitting path was used"))
+    values = learner.wm_diagnostics(window)
+    assert calls == [False] * 8
+    assert values["step1/valid_count"] == 3
+    assert values["step8/valid_count"] == 2
+    assert values["clip2/step8/valid_count"] == 0
+    assert torch.isnan(values["clip2/step8/error"])
+    assert torch.isfinite(values["step8/error"])
+    expected = (values["clip0/step8/error"] + values["clip1/step8/error"]) / 2
+    torch.testing.assert_close(values["step8/error"], expected)
+    for name, value in learner.wm.state_dict().items():
+        torch.testing.assert_close(value, before[name], rtol=0, atol=0)
+    assert learner.opt_wm.state_dict() == optimizer_before
+    assert learner.steps == {"wm": 0, "pi": 0, "v": 0}
+
+
+def test_diagnostics_separate_normalized_actuator_memory_from_physical_errors():
+    learner = make_learner(True)
+    learner.wm = WorldModel(hidden=(16, 16, 16), context_dim=2, memory_dim=66)
+    learner.error_floor = torch.full((140,), 0.01)
+    learner.wm.out_norm.var.fill_(4)
+    base = torch.cat((flat_state(2), torch.zeros(2, 66)), -1)
+    window = {"s": base[:, None].expand(-1, 8, -1).clone(),
+              "s1": base[:, None].expand(-1, 8, -1).clone(),
+              "a": torch.zeros(2, 8, 31), "xi": torch.zeros(2, 8, 2),
+              "f": torch.arange(8)[None].expand(2, -1), "mask": torch.ones(2, 8)}
+    window["s1"][..., 75:] = 2
+    values = learner.wm_diagnostics(window)
+    for step in (1, 8):
+        torch.testing.assert_close(values[f"step{step}/memory_physical"], torch.tensor(2.))
+        torch.testing.assert_close(values[f"step{step}/memory"], torch.tensor(1.))
+        torch.testing.assert_close(values[f"step{step}/root_position_physical"], torch.tensor(0.))
+
+
+def test_diagnostics_count_only_valid_physical_false_alive_at_arrival_frames(monkeypatch):
+    learner = make_learner(True)
+    learner.motion.clip_id = torch.cat((torch.zeros(32, dtype=torch.long),
+                                      torch.ones(32, dtype=torch.long),
+                                      torch.full((64,), 2, dtype=torch.long)))
+    learner.motion.clip_end = torch.tensor([31, 63, 127])
+    base = flat_state(3)
+    base[:, 2] = 0.5
+    window = {"s": base[:, None].expand(-1, 8, -1).clone(),
+              "s1": base[:, None].expand(-1, 8, -1).clone(),
+              "a": torch.zeros(3, 8, 31), "xi": torch.zeros(3, 8, 2),
+              "f": torch.tensor([0, 40, 120])[:, None] + torch.arange(8),
+              "mask": torch.tensor([[1.] * 8, [1.] * 8, [1.] + [0.] * 7])}
+    window["s1"][0, :, 2] = 0.1  # A real failure, incorrectly predicted alive.
+    window["s1"][2, :, 2] = 0.1  # Included at step1, excluded at step8.
+    window["f"][1, 7] = 62  # Source end arrival is physical-success evidence.
+    window["f"][2, 7] = 9999  # Invalid padding cannot index outside the library.
+    monkeypatch.setattr(learner.wm, "step", lambda state, action, xi: state)
+    called_frames = []
+    original = learner.mdp.termination
+
+    def termination(state, frame):
+        called_frames.append(frame.clone())
+        return original(state, frame)
+
+    monkeypatch.setattr(learner.mdp, "termination", termination)
+    values = learner.wm_diagnostics(window)
+    torch.testing.assert_close(called_frames[0], window["f"][:, 0] + 1)
+    torch.testing.assert_close(called_frames[-1], torch.tensor([8, 63, 127]))
+    assert values["step1/physical_failure_count"] == 2
+    assert values["step1/false_alive_count"] == 2
+    assert values["step8/physical_failure_count"] == 1
+    assert values["step8/false_alive_count"] == 1
+    assert values["step8/false_alive_rate"] == 1
+    assert values["step8/true_failure_fraction"] == 0.5
+    assert values["step8/predicted_failure_fraction"] == 0
+    assert values["clip1/step8/physical_failure_count"] == 0
+    assert torch.isnan(values["clip1/step8/false_alive_rate"])
+    assert values["clip2/step8/valid_count"] == 0
+    assert values["clip2/step8/false_alive_count"] == 0
+    assert torch.isnan(values["clip2/step8/false_alive_rate"])

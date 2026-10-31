@@ -105,6 +105,88 @@ class Learner:
             torch.stack([s[i] for s in predictions], 1) for i in range(len(state))
         )
 
+    @torch.no_grad()
+    def wm_diagnostics(self, window):
+        """Read-only held-out 1/8-step errors, eagerly unrolling logged actions.
+
+        The caller owns the validation split. `mask` includes the physical
+        terminal transition and excludes post-reset successors. Errors never
+        treat masked rows as zero-valued evidence. Normalized errors use exactly
+        the training out_norm/error_floor scales; physical RMSEs retain metres,
+        radians, velocities, or the actuator memory's own normalized units.
+        """
+        batch, available = window["a"].shape[:2]
+        if batch < 1 or available < 8 or window["mask"].shape[:2] != (batch, available):
+            raise ValueError("WM diagnostics require a nonempty batch of eight-step windows")
+        state = unflatten_state(window["s"][:, 0])
+        scale = torch.maximum(self.wm.out_norm.std(), self.error_floor)
+        joints = self.wm.num_joints
+        groups = {
+            "root_position": slice(0, 3),
+            "root_rotation": slice(3, 6),
+            "root_linear_velocity": slice(6, 9),
+            "root_angular_velocity": slice(9, 12),
+            "joint_position": slice(12, 12 + joints),
+            "joint_velocity": slice(12 + joints, 12 + 2 * joints),
+        }
+        if self.wm.predict_memory_dim:
+            groups["memory"] = slice(12 + 2 * joints, scale.numel())
+        first_clip = self.motion.clip_id[window["f"][:, 0]]
+        result = {}
+        for step in range(8):
+            # Explicit eager path: no compiled fitting function, no updates.
+            state = self.wm.step(state, window["a"][:, step], self.normalize_xi(window["xi"][:, step]))
+            if step not in (0, 7):
+                continue
+            truth = unflatten_state(window["s1"][:, step])
+            error = self.wm.state_error(state, truth)
+            valid = window["mask"][:, step].bool()
+            predicted_failure = true_failure = None
+            if callable(getattr(self.mdp, "termination", None)):
+                # Reproduce the simulator's f1=min(f+1,inclusive_clip_end).
+                # Padding can be beyond the library; only invalid frames are
+                # clamped, while corrupt valid references still fail loudly.
+                frame = window["f"][:, step]
+                frame = torch.where(valid, frame, frame.clamp(0, self.motion.clip_id.numel() - 1))
+                frame = torch.minimum(frame + 1, self.motion.clip_end[self.motion.clip_id[frame]])
+                predicted_failure = self.mdp.termination(state, frame).bool()
+                true_failure = self.mdp.termination(truth, frame).bool()
+            selections = [("", torch.ones_like(valid))]
+            selections += [(f"clip{clip}/", first_clip == clip) for clip in range(len(self.motion.clip_end))]
+            for prefix, selected in selections:
+                tag = f"{prefix}step{step + 1}"
+                used = selected & valid
+                count = used.sum()
+                result[f"{tag}/valid_count"] = count
+                result[f"{tag}/sample_count"] = selected.sum()
+                result[f"{tag}/valid_fraction"] = count.float() / selected.sum().clamp_min(1)
+                if true_failure is not None:
+                    failures = (true_failure & used).sum()
+                    predicted = (predicted_failure & used).sum()
+                    false_alive = (true_failure & ~predicted_failure & used).sum()
+                    missing = error.new_full((), torch.nan)
+                    result[f"{tag}/physical_failure_count"] = failures
+                    result[f"{tag}/predicted_failure_count"] = predicted
+                    result[f"{tag}/false_alive_count"] = false_alive
+                    result[f"{tag}/false_alive_rate"] = torch.where(
+                        failures > 0, false_alive.float() / failures.clamp_min(1), missing
+                    )
+                    result[f"{tag}/predicted_failure_fraction"] = torch.where(
+                        count > 0, predicted.float() / count.clamp_min(1), missing
+                    )
+                    result[f"{tag}/true_failure_fraction"] = torch.where(
+                        count > 0, failures.float() / count.clamp_min(1), missing
+                    )
+                # Mean of an empty selection is intentionally NaN. Report its
+                # zero count, rather than mistaking missing coverage for accuracy.
+                physical = error[used]
+                normalized = physical / scale
+                result[f"{tag}/error"] = normalized.square().mean()
+                for name, columns in groups.items():
+                    result[f"{tag}/{name}"] = normalized[:, columns].square().mean().sqrt()
+                    result[f"{tag}/{name}_physical"] = physical[:, columns].square().mean().sqrt()
+        return result
+
     @staticmethod
     def _chunks(total, requested):
         size = requested if requested and requested > 0 else total

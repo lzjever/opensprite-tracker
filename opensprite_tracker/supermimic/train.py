@@ -1,7 +1,7 @@
-"""Train the X2 single-motion SuperMimic reproduction on mjlab.
+"""Train one shared OpenSprite SuperMimic tracker with explicit WM warmup.
 
-Example: python -m supermimic_x2.train --output outputs/supermimic/run-01
-All updates are model-based; the old PPO task/runner is not modified.
+Run the committed configuration through scripts/monitor_training.py.
+All learning uses recorded physics transitions and imagined trajectories.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def parser():
     p.add_argument("--save-every-seconds", type=float, default=600.0)
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--num-envs", type=int, default=4096)
+    p.add_argument("--num-envs", type=int, default=768)
     p.add_argument(
         "--iterations",
         type=int,
@@ -77,15 +77,18 @@ def parser():
     p.add_argument("--goal-frames", type=int, default=10)
     p.add_argument("--hist", type=int, default=10)
     p.add_argument("--wm-window", type=int, default=8)
-    p.add_argument("--wm-batches", type=int, default=10)
-    p.add_argument("--wm-batch", type=int, default=2048)
-    p.add_argument("--pi-batch", type=int, default=4096)
+    p.add_argument("--wm-batches", type=int, default=4)
+    p.add_argument("--wm-batch", type=int, default=1024)
+    p.add_argument("--pi-batch", type=int, default=512)
     p.add_argument("--wm-width", type=int, default=2048)
-    p.add_argument("--wm-microbatch", type=int, default=256, help="gradient accumulation within the full logical WM batch; 0 disables")
-    p.add_argument("--pi-microbatch", type=int, default=128, help="gradient accumulation within the full logical imagined rollout batch; 0 disables")
-    p.add_argument("--critic-microbatch", type=int, default=8192, help="gradient accumulation within each logical critic minibatch; 0 disables")
+    p.add_argument("--wm-microbatch", type=int, default=1024, help="gradient accumulation within the full logical WM batch; 0 disables")
+    p.add_argument("--pi-microbatch", type=int, default=512, help="gradient accumulation within the full logical imagined rollout batch; 0 disables")
+    p.add_argument("--critic-microbatch", type=int, default=4096, help="gradient accumulation within each logical critic minibatch; 0 disables")
     p.add_argument("--critic-storage", choices=["cpu", "cuda"], default="cpu")
     p.add_argument("--replay-device", choices=["cpu", "cuda"], default="cpu", help="storage only; sampled transitions are returned to --device")
+    p.add_argument("--wm-validation-envs", type=int, default=0)
+    p.add_argument("--wm-validation-every", type=int, default=50)
+    p.add_argument("--wm-validation-batch", type=int, default=384)
     p.add_argument("--policy-hidden", type=int, nargs="+", default=[2048, 1024, 512, 256])
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--gamma", type=float, default=0.99)
@@ -94,13 +97,14 @@ def parser():
     p.add_argument("--critic-epochs", type=int, default=5)
     p.add_argument("--critic-minibatches", type=int, default=4)
     p.add_argument("--warmup-steps", type=int, default=64)
-    p.add_argument("--wm-only-iters", type=int, default=0)
+    p.add_argument("--wm-only-iters", type=int, default=500)
     p.add_argument("--lr-decay-iters", type=int, default=250000)
     p.add_argument("--save-every", type=int, default=1000)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--amp", choices=["none", "bf16"], default="none")
     p.add_argument("--compile", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--resume", type=Path)
+    p.add_argument("--world-model-from", type=Path, help="inherit only compatible WM/cost heads, normalization and their Adam; fresh actor/critic/sampler")
     p.add_argument(
         "--reward-profile", choices=["paper", "legacy_full"], default="legacy_full"
     )
@@ -115,6 +119,7 @@ def parser():
 
 def checkpoint(learner, args, iteration, sim_steps, wall_seconds, sampler=None):
     result = {
+        "initialization": getattr(learner, "initialization", None),
         "wm": learner.wm.state_dict(),
         "pi": learner.pi.state_dict(),
         "critic": learner.critic.state_dict(),
@@ -157,8 +162,10 @@ def main():
     signal.signal(signal.SIGINT, request_stop)
     args = parser().parse_args()
     torch.set_num_threads(4)
-    if args.resume and args.initialize_from:
-        raise ValueError("Use resume OR initialize-from, not both")
+    if sum(bool(x) for x in (args.resume, args.initialize_from, args.world_model_from)) > 1:
+        raise ValueError("Use exactly one of resume, initialize-from or world-model-from")
+    if args.wm_validation_envs and (args.wm_validation_every < 1 or args.wm_validation_batch < 1):
+        raise ValueError("WM validation interval and batch must be positive")
     if not args.full_body_collision:
         raise ValueError("OpenSprite task requires its full physical collision model")
     args.output = args.output.resolve()
@@ -196,8 +203,10 @@ def main():
                 if args.resume
                 else "wm_actor_only"
                 if args.initialize_from
+                else "world_model_and_cost_heads_only"
+                if args.world_model_from
                 else "all_networks_random",
-                "resume_semantics": "iterations is absolute end; new output directory for every attempt",
+                "resume_semantics": "iterations is absolute end; immutable launch record per attempt in the campaign output directory",
             },
             indent=2,
             default=str,
@@ -267,6 +276,7 @@ def main():
         context_dim=CONTEXT_DIM,
         extra_fields=extras,
         storage_device=args.replay_device,
+        validation_envs=args.wm_validation_envs,
     )
     learner = Learner(
         wm,
@@ -328,6 +338,7 @@ def main():
         if ck.get("sampling"):
             sampler.returns.copy_(ck["sampling"]["returns"])
             sampler.past.copy_(ck["sampling"]["past"])
+        learner.initialization = ck.get("initialization")
         print(
             f"RESUME absolute iteration {start} -> {args.iterations}; replay refilled from real simulation",
             flush=True,
@@ -343,6 +354,23 @@ def main():
             "new reward/value/transition heads/optimizers/sampling; new iteration 0",
             flush=True,
         )
+    elif args.world_model_from:
+        from .initialization import initialize_world_model
+        from .robot import physical_contract
+
+        source = args.world_model_from.resolve(strict=True)
+        ck = torch.load(source, map_location="cpu", weights_only=False)
+        learner.initialization = initialize_world_model(
+            learner, ck, robot_contract=physical_contract(),
+            dataset_revision=args.dataset_revision,
+            full_body_collision=args.full_body_collision,
+        )
+        learner.initialization["source_checkpoint"] = str(source)
+        (args.output / "world-initialization.json").write_text(
+            json.dumps(learner.initialization, indent=2) + "\n"
+        )
+        print("WORLD_MODEL_WARM_START", json.dumps(learner.initialization), flush=True)
+        del ck
     writer = SummaryWriter(str(args.output / "tensorboard"))
     history = torch.zeros(args.num_envs, args.hist, OBS_DIM, device=args.device)
     stats = {}
@@ -352,6 +380,28 @@ def main():
         # Keep reductions on GPU until a sparse log point, not sync every term.
         stats[key] = stats.get(key, 0.0) + value.detach()
         stats_count[key] = stats_count.get(key, 0) + 1
+
+    validation_generator = torch.Generator(device=buffer.storage_device).manual_seed(args.seed + 100003)
+
+    @torch.no_grad()
+    def diagnose_world_model(iteration):
+        if not args.wm_validation_envs:
+            return
+        window = buffer.sample_windows(
+            args.wm_validation_batch, args.wm_window,
+            split="validation", generator=validation_generator,
+        )
+        diagnostics = learner.wm_diagnostics(window)
+        result = {"iteration": iteration, "phase": "warmup" if iteration <= args.wm_only_iters else "joint"}
+        for key, tensor in diagnostics.items():
+            value = float(tensor)
+            result[key] = value if math.isfinite(value) else None
+            if math.isfinite(value):
+                writer.add_scalar("validation/" + key, value, iteration)
+        with (args.output / "wm-validation.jsonl").open("a") as stream:
+            stream.write(json.dumps(result, sort_keys=True) + "\n")
+        writer.flush()
+        print("WM_VALIDATION", json.dumps(result, sort_keys=True), flush=True)
 
     @torch.no_grad()
     def collect(count):
@@ -422,6 +472,7 @@ def main():
     started = attempt_started
     env.impact_ramp.fill_(0.0 if mdp.uses_transition_metrics else 1.0)
     collect(args.warmup_steps)
+    diagnose_world_model(start)
     print(
         f"READY real_steps={sim_steps} actor={OBS_DIM}x{args.hist}+goal={goal.shape[-1]} "
         f"action=31 state={75 + MEM_DIM} context={CONTEXT_DIM} critic={critic_dim}",
@@ -507,6 +558,8 @@ def main():
         if it >= args.wm_only_iters:
             for key, value in learner.policy_update().items():
                 metric("imagination/" + key, value)
+        if args.wm_validation_envs and (it + 1) % args.wm_validation_every == 0:
+            diagnose_world_model(it + 1)
         finished_iteration = it + 1
         budget_stop = (
             args.max_wall_seconds > 0

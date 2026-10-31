@@ -41,7 +41,9 @@ PYTHONPATH=. .venv/bin/python scripts/inspect_retarget_geometry.py \
 
 ## 训练、监控和评估
 
-正式配置与确切命令保存在 [configs/training.json](configs/training.json)。 当前用户已授权按官方论文规模重新训练：WM2048×3、策略2048/1024/512/256、4096环境、WM10×2048窗口、策略4096轨迹、replay1000步/环境、TF32。16GB适配采用CPU replay与完整逻辑batch内的梯度累积；详见[重新训练方案](docs/plan/paper-scale-restart.md)。本轮重新获得独立12小时预算，旧轮结果保留。本轮初始化/编译、GPU训练验证及正式训练/恢复共用新授权的12小时单卡预算，恢复不得刷新。完整 checkpoint 保存actor/critic/世界模型、双成本预测head、全部优化器、采样状态和累计时钟；恢复不能重置预算。
+正式配置与确切命令保存在 [configs/training.json](configs/training.json)。当前按团队交叉审查采用大WM2048×3和四层策略，先WM预热再联合训练；env768、WM每轮4×1024窗口、actor512条H32轨迹、critic保留5×4。详见[预热重训方案](docs/plan/warmstart-training.md)。使用此前新授权12小时的剩余预算，预热/编译/恢复均计入，不再刷新。
+
+完整 checkpoint 保存actor/critic/世界模型、双成本预测head、全部优化器、采样状态和累计时钟；恢复不能重置预算。
 
 训练入口支持 `--resume <checkpoint>`；监控入口在 tmux 中启动单个子任务，每小时保存 TensorBoard/GPU 遥测、在同配置异常退出后从最近完整快照恢复，并对累计时间设上限：
 

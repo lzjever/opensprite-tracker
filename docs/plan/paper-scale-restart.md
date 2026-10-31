@@ -1,4 +1,6 @@
-# SuperMimic 论文规模重新训练
+# SuperMimic 论文规模重新训练（历史阶段）
+
+最新执行方案已由用户授权调整batch/频率并先预热WM，见[warmstart-training.md](warmstart-training.md)。以下是已停止并保留的论文规模实验记录。
 
 ## 用户授权与新预算
 

@@ -97,3 +97,54 @@ def test_add_validation_is_atomic_and_storage_size_matches_paper_capacity():
     per_transition = sum(value.numel()*value.element_size() for value in small.data.values()) // 6
     assert per_transition == 2669
     assert per_transition*4096*1000 == 10_932_224_000
+
+
+def test_wm_holdout_environment_pools_are_disjoint_actor_starts_are_not():
+    replay = ReplayBuffer(5, 6, "cpu", state_dim=2, action_dim=1,
+                          context_dim=1, storage_device="cpu", validation_envs=3)
+    for time in range(7):
+        replay.add(transition(time, num_envs=6))
+    train = replay.sample_windows(256, 3, split="train")
+    validation = replay.sample_windows(256, 3, split="validation")
+    assert set(train["s"][..., 1].flatten().tolist()) == {0., 1., 2.}
+    assert set(validation["s"][..., 1].flatten().tolist()) == {3., 4., 5.}
+    for samples in (train, validation):
+        assert (samples["s"][:, 1:, 0]-samples["s"][:, :-1, 0] == 1).all()
+        assert (samples["s"][:, 1:, 1] == samples["s"][:, :-1, 1]).all()
+    start, history = replay.sample_starts(256, 6)
+    assert set(start["s"][:, 1].tolist()) == {0., 1., 2., 3., 4., 5.}
+    torch.testing.assert_close(start["s"], history["s"][:, -1])
+
+
+def test_no_holdout_preserves_default_sampling_and_rejects_validation_split():
+    replay = filled_buffer()
+    torch.manual_seed(83)
+    expected_ages = torch.randint(3, (32,))
+    expected_envs = torch.randint(2, (32,))
+    torch.manual_seed(83)
+    windows = replay.sample_windows(32, 3)
+    torch.testing.assert_close(windows["s"][:, 0, 0], expected_ages.float()+2)
+    torch.testing.assert_close(windows["s"][:, 0, 1], expected_envs.float())
+    with pytest.raises(ValueError, match="no validation"):
+        replay.sample_windows(1, 1, split="validation")
+    with pytest.raises(ValueError, match="split"):
+        replay.sample_windows(1, 1, split="other")
+    for invalid in (-1, 2, 3):
+        with pytest.raises(ValueError, match="validation_envs"):
+            ReplayBuffer(2, 2, "cpu", validation_envs=invalid)
+
+
+def test_validation_generator_reproduces_windows_without_training_rng_consumption():
+    replay = ReplayBuffer(5, 6, "cpu", state_dim=2, action_dim=1,
+                          context_dim=1, storage_device="cpu", validation_envs=3)
+    for time in range(7):
+        replay.add(transition(time, num_envs=6))
+    torch.manual_seed(101)
+    before = torch.get_rng_state().clone()
+    first = replay.sample_windows(16, 4, split="validation",
+                                 generator=torch.Generator().manual_seed(37))
+    torch.testing.assert_close(torch.get_rng_state(), before)
+    second = replay.sample_windows(16, 4, split="validation",
+                                  generator=torch.Generator().manual_seed(37))
+    for key in first:
+        torch.testing.assert_close(first[key], second[key])
