@@ -232,3 +232,80 @@ WMonly500×4已实际完成，model500验证WM/head4890步、PI/V优化0步、ac
 ### 2026-11-01 02:21 +08：joint实际更新与小时审计恢复
 
 新joint固定85acdaf，trainer2257110。model501实际CPU核对WM/head4894、PI1、critic20，229张量全有限；到outer700=actor200更新，约1.44outer/s，GPU4.8GiB，未发现OOM/NaN。真实回报和episode仍处早期，不能因吞吐/有限性宣称控制质量。CLI小时runner2259231/agent2259237于02:19:46启动并实际读取本run证据，正常时继续，发现有依据的学习/程序故障可安全干预并在同余额续训。完整命令/边界/审查记录见warmstart-training.md。
+
+
+### 2026-10-31 18:26 UTC：warmstart joint首审 20261031T181946.422753Z
+
+结论：唯一trainer持续推进，未见程序/数值故障；早期训练收益和真实存活较此前论文轮改善，但三动作前缀仍全部失败，共享policy尚未收敛。WM终止附近的乐观风险和起身关节误差需重点追踪。本次保持训练运行，没有改源码、配置、物理、UMR、delay/lag、奖励或终止语义，没有启动第二trainer或刷新预算。
+
+收尾核实时刻 2026-10-31T18:26:28.317669+00:00，supervisor更新于2026-10-31T18:26:24.768267+00:00。启动快照620→当前1170；trainer PID2257110、supervisor2257104完整argv/cwd匹配本repo，restarts=0。日志/CSV/当前TensorBoard持续增长，旧warmup事件文件不再增长属正常。RUN/completion.json仍是预热500的历史阶段记录，不能据它宣称joint已结束。训练源码与实际resume launch均为固定85acdaf364781a324f4f870166554ab55b082ea5，分支train/opensprite-umr-lafan3-warmstart-20261101-joint未移动；当前普通文档分支master，runtime/配置/资产/动作相对快照无diff。
+
+预算：campaign=2925.031秒（0.8125小时，已含prior 2244.928498502秒），formal_elapsed=680.102秒；soft43020余40094.969秒（11.137小时），hard43200余40274.969秒。保留180秒停止预留，未二次加prior。model1/500/501/1000正式runtime为34.460/169.834/197.030/549.252秒；joint恢复floor175.034秒承接预热attempt累计，时钟一致。最早旧轮9508.822秒不计，此前Nov1论文轮2244.928秒已在prior内。等待自然checkpoint及评估时trainer持续运行，原supervisor继续计时，没有额外梯度更新。
+
+本RUN原先没有hourly/latest.md，本次是该RUN首份CLI小时结论；以预热审核、当前joint初期501–540和此前论文轮首审作区分对照。没有将旧小网络已完成步行的成绩冒充本轮成绩。joint初期→本次1020–1110：三clip reward -1.139/-1.177/-.733→-.351/-.142/.240；joint RMSE .519/.493/.496→.424/.563/.286，起身反而恶化。全局reward -1.016→-.084、episode均长33.96→43.87步、归一化episode return -1.382→-.214，证明部分学习有效，仍是短episode。
+
+最近相邻各10记录点窗口920–1010 → 1020–1110，termination/reset为每真实步频率、joint为RMSE rad：
+
+| 动作 | reward | termination | reset | joint RMSE | active fraction |
+| --- | --- | --- | --- | --- | --- |
+| 0 舞蹈 | -0.4251→-0.3505 | 0.02936→0.03064 | 0.02942→0.03069 | 0.4372→0.4240 | 各1/3 |
+| 1 起身 | -0.2529→-0.1417 | 0.01303→0.01247 | 0.01308→0.01261 | 0.5597→0.5628 | 各1/3 |
+| 2 步行 | 0.1811→0.2404 | 0.02719→0.02609 | 0.02736→0.02617 | 0.3018→0.2861 | 各1/3 |
+
+三动作各256环境，WM训练每clip248、留出8，无动作被采样饿死；这不证明动作每个相位均已学会。近期舞蹈reward/关节误差改善同时termination与reset上升；起身reward/termination改善但关节误差微升且长期反弹；步行近期各项改善。全局episode41.82→43.87步、归一化return -.223→-.214。日志无逐clip实测episode长度，未以reset倒数替代；下表给出首帧连续真实评估的长度。
+
+本次仅对新checkpoint model_001000.pt运行每clip一次seed42、num-envs3、max-steps500的真实仿真prefix；nominal保留随机command delay与一阶torque lag，冻结policy/norm，无reset/参考循环。三个请求均正常退出，全部9实例提前物理失败，summary均complete_clip=false、success_rate=null。不是完整请求或完整成功：
+
+| clip | 实际转移/请求500 | env0/1/2首次失败秒 | body/foot均值cm | joint MAE rad | root姿态rad | pelvis漂移均值/最大m |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 142/500 | 2.16/2.02/2.84 | 21.34/9.87 | 0.241 | 0.253 | 0.090/0.461 |
+| 1 | 215/500 | 2.90/4.30/3.02 | 16.64/10.49 | 0.230 | 0.351 | 0.106/0.532 |
+| 2 | 129/500 | 2.54/2.58/1.82 | 19.67/9.36 | 0.235 | 0.162 | 0.084/0.476 |
+
+body/foot相对量以legacy waist_yaw_link锚定；pelvis漂移另由rollout计算。九个失败时pelvis高度误差.174–.190m越过既有.17m，gravity平方差.463–.794未越1.6。此前论文轮model30为约.94–1.00s、model147约.96–1.42s；当前存活延后，但不是同一训练设置的配对因果证明，且不同有效覆盖下误差均值不可直接当改善量。三动作body误差仍16.6–21.3cm，远离来源model22000约3.4/4.0cm、root姿态约.10rad的解释尺度；未触发成熟全长评估条件，也不恢复rootXYZ≤.1m硬门槛。完整源分别11283/5108/8195转移、225.66/102.16/163.90秒，目前未验证全长。
+
+三个prefix速度峰值/官方限值2.107/2.254/2.020，raw torque请求/额定2.824/2.589/2.461，实际施加torque比均≤1；足接触峰275/156/131N，非足body接触峰均0N。控制超速、力矩请求饱和及漂移仍须改进，不能把合法倒地接触禁止掉。参考needs_review保留：舞蹈极少帧>3cm自穿，起身/步行局部壳体残差未隐瞒。
+
+WM：近期loss .26202→.24012，每有效转移误差.28872→.26312，末步误差.41770→.38013，末步valid .81006→.82018；本次回落伴随有效比例增加，不能归因于大量早失败使有效样本缩小。但相对joint初期每有效转移.20897仍高，预热后的分布变化不能只用混合loss下结论。成本双head loss .004958→.004454，分歧.001463→.001340；没有逐成本峰值校准证据，不能声称不存在低估/饱和。
+
+留出验证1100（1536窗，独立generator，不改变训练采样RNG；normalization仍用全部采集环境，非完全隔离统计验证）。下表物理RMSE均为1步→8步；root位置为坐标分量米，姿态为旋转向量分量rad，memory是actuator memory自身归一化单位，不能直接当位置向量范数/全姿态角/力矩Nm：
+
+| 分组 | 1/8步有效count | root位置mm | 姿态rad | q rad | qd rad/s | root线速m/s | root角速rad/s | memory |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 全体 | 1536/1317 | 1.4440→8.2575 | 0.0065→0.0432 | 0.0112→0.0413 | 0.7655→0.7959 | 0.0532→0.0896 | 0.3926→0.5388 | 0.0891→0.1151 |
+| 舞蹈 | 509/423 | 1.5941→9.1416 | 0.0074→0.0513 | 0.0124→0.0411 | 0.8638→0.8953 | 0.0642→0.0998 | 0.4554→0.6620 | 0.0989→0.1210 |
+| 起身 | 528/474 | 1.5984→9.5262 | 0.0067→0.0461 | 0.0120→0.0518 | 0.7882→0.8745 | 0.0571→0.1029 | 0.4041→0.5572 | 0.0886→0.1259 |
+| 步行 | 499/420 | 1.0594→5.2184 | 0.0052→0.0286 | 0.0090→0.0252 | 0.6209→0.5622 | 0.0326→0.0565 | 0.3000→0.3443 | 0.0785→0.0942 |
+
+1100留出8步有效1317/1536=.857，较预热末1249/1536=.813提高，但物理root位置6.64→8.26mm、q .0341→.0413rad仍高于预热末，姿态.04315→.04323rad近似。相较joint早期650的root10.22mm、q.0517rad有所恢复。H8仅.16s，不能证明H32=.64s准确。最近1000/1050/1100的8步false-alive合计41/135=30.37%，舞蹈21/66=31.82%、起身11/27=40.74%、步行9/42=21.43%；预热近三次25/130=19.23%，乐观风险升高。1100单次15/47，1步1/31，不能只看全体RMSE。均采用原物理终止，无upright或 blanket body-ground规则。count0对应null仅无分母，不当作0误差或训练NaN。官方nominal尺度不与本repo统计归一化作直接倍数比较。
+
+actor裁剪前梯度均值3.82→23.45，后者主要由1030单点195.74抬高，其余多约3.7–4.9；源码先范数1后逐值.1裁剪，无非有限梯度。critic loss .015564→.015492，critic梯度范数无遥测，未虚报；源码逐更新检查有限并裁剪至1。imagined survival .2390→.2742、reward .1024→.1248，真实reward -.1657→-.0840，模型内外仍有差距，不以想象收益代替真实表现。
+
+CPU重读1/500/501/1000检查点及optimizer均有限，1000共229张量。WM/head累计6890步（源2890+预热2000+joint2000）、actor500、critic10000，准确对应joint每outer WM4、actor1、critic20；不能拿累计绝对步比作当前更新频率。501→1000四模块学习权重/偏置L2变化WM16.25、actor15.57、critic19.34、head13.03，确认都有实际更新。初始化json与checkpoint均记录只继承WM/head和相应Adam/norm；1→500 actor学习参数不变，critic全状态此前审核相等，actor观测norm继续采集是正常。
+
+所有已读CSV、TensorBoard抽样、WM JSON有效数值及评估有效指标有限，日志无NaN/Inf/OOM/Traceback；空分母null未误报。GPU观察33–99%、总显存4903MiB/16303MiB，评估时5669MiB，温度55–58°C；训练进程3956MiB、PyTorch allocated峰2.511GiB。三评估已退出，无残留评估进程；另一既有GPU进程未作任何操作。
+
+干预判断：这是恢复joint后约8分钟内的早期证据，真实reward/episode和较此前论文轮的前缀存活在改善，没有连续真实评估退化或覆盖饿死。false-alive及起身误差是明确学习风险，但当前尚未构成应立即停止补WM/改更新率的充分交叉证据；不能把有限数值与存活进程直接叫学习健康。保留原设置继续积累joint分布，本次不做盲调；下一小时优先核查false-alive是否持续/扩大、起身q误差与高度漂移、舞蹈termination上升、actor大梯度是否反复和真实前缀改善是否停滞。若真实表现转为连续退化并伴WM乐观，按旧checkpoint→安全停稳→新固定快照→原剩余预算的授权流程干预。
+
+后台核实：指定tmux opensprite-hourly-audit的runner PID2259231持有本RUN/hourly/audit.lock；CLI node2259237/实际codex2259244为本次审计父链，无-m/--model覆盖。supervisor2257104独占supervisor.lock。立即首审真实执行；runner按3600秒串行且跳过错过周期，没有递归Codex、第二runner或系统service/timer/cron。按实际started_at18:19:46.422776 UTC，下次目标19:19:46.422776 UTC（北京时间11月1日03:19:46），本审计仍在其子进程内，next_run_at会在本次返回后写入；这是核实规则推导而非已观察waiting。机器必须开机；tmux退出/重启需重启同脚本，预算不重置。
+
+本次训练未结束，未做最终交付或创建delivery-complete marker，未终止父runner。未来结束仍须冻结同一个共享checkpoint做3clip×seed42/43/44全源请求、三段seed42/env0 ghost、独立代码/资产/许可证/命令包和诚实质量报告。
+
+完整证据与分析：outputs/train/opensprite-umr-lafan3-warmstart-20261101/hourly/20261031T181946.422753Z/analysis-report.md；同目录initial-analysis.json、closing-analysis.json、checkpoint-evidence.json、telemetry.json、runner-verification.json、closing-verification.json及eval-clip0/1/2真实summary/rollout/log。普通文档仅追加本review，未在固定train分支提交。
+
+
+收尾追加复核：2026-10-31 18:27:54 UTC，唯一trainer PID2257110继续运行，CSV至1300全部已读标量有限，三个评估均已退出且核验同一1000共享checkpoint。campaign=3015.056秒（已含prior），formal=770.127秒，soft余40004.944秒、hard余40184.944秒，180秒预留不变。closing-telemetry.json再次核实最新TensorBoard已读标量全部有限；本次只改docs/plan/training-review.md，训练快照和配置未改，未创建delivery marker。
+
+
+### 2026-11-01 02:39 +08：用户进展查询，1848检查点三源前缀复测
+
+同一model1848/seed42/每clip3env/请求500转移的真实prefix已全部完成，9/9连续10秒无failure，保留随机delay/lag，无reset或循环；summary complete_clip=false/success_rate=null，绝非完整源成功。此前同run checkpoint1000失败约2–4秒，本次短段稳定性改善；checkpoint147属于上一已停paper轮，不能混用模型/优化计数。
+
+舞蹈/起身源/步行body相对误差13.53/11.18/9.94cm，jointRMSE .3804/.3741/.3256rad；pelvis漂移均值 .2889/.6179/.0882m，10秒末约.58/1.53/.17m。起身源只是长102秒开头10秒，不能称学会倒地起身；舞蹈/起身全局漂移仍大。所有数值有限、施加力矩/各joint额定比≤1，瞬时速度比峰2.436/3.415/1.895，仍有超速。原始summary/rollout及汇总保存RUN/on-demand/20261101-0236，未来同checkpoint/clip/seed/前缀不重复运行。
+
+相比1000–1090窗口，1830–1920窗口真实reward -.0938→.0930、episode43.11→127.63步、termination .02287→.005807，WM每有效转移误差 .2713→.2079、末步valid .8183→.9143。jointRMSE舞蹈.4268→.4655、步行.2889→.3166反弹，起身.5654→.4780改善，不能称精度全面提升。保持现配置继续训练；小时审计真实完成，下一次03:19:46，未重置预算或修改训练代码。
+
+
+### 2026-11-01 03:05 +08：checkpoint3000高画质录像
+
+按用户请求固定开始时最新已存model3000，三个clip seed42/env0各请求前30s实际物理录像，保留delay/lag/noreset。dance/walk连续30s无物理失败，末端pelvis漂移3.089/1.817m；getup10.06s因gravity²1.600183越1.6真实失败，高度差.03449m正常，不算完整起身。1080p50fps、棋盘地面、中文数值HUD、蓝色参考worldghost、双模型平滑自适应镜头；失败附1.5s明示停帧。三片及71.62s带chapter合集已ffprobe/成片解码抽帧QA；文档recording-visuals.md，素材outputs/recordings/model_003000-20261101-0251。无梯度新训练、没有停止现trainer；仅离线render代码变化，固定训练物理/算法快照不动。下次审核不得把此录像当完整三动作成功。
