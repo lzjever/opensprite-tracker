@@ -18,6 +18,8 @@
 
 ## 每次必须真正分析
 
+用户补充关注世界模型容量。先阅读 `docs/plan/supermimic-paper-audit.md`：官方TableA.4是2048×3，当前768×3是缩小的本地复现；当前参数1596044，同OpenSprite接口2048×3为9498764，不可混称官方精确参数量。策略也缺论文首层2048。报告中区分容量差异事实与“欠拟合导致失败”的未证实假设，关注分clip/接触阶段/滚动步数误差。现有数据不能支持的结论应明确未知；不为了回答容量问题擅自扩宽或重启健康训练。官方nominal归一化误差不可直接与当前统计归一化loss作倍数比较。
+
 1. 读取最新训练分段日志、CSV/TensorBoard、supervisor状态、最近与较早检查点、GPU利用率/显存/温度。可用 `.venv/bin/python scripts/brief_training.py`、`scripts/training_snapshot.py`、`nvidia-smi`。原始telemetry文件不等于完成审计。
 2. 对照上次报告和至少最近几个记录点，逐clip分析真实reward、termination、episode长度、joint误差、采样active fraction；检查是否有某动作退化或被饿死。当前768环境按ID均分3动作，正常active fraction各1/3。
 3. 联合查看WM loss、每有效转移误差、末步valid fraction、成本head loss/分歧、actor/critic梯度和imagined survival。低WM误差若来自大量早失败/有效样本缩小不能当好消息；模型内收益不能代替真实表现。检查NaN/Inf/OOM/卡住/退出/重复进程以及真实文件是否继续更新。
