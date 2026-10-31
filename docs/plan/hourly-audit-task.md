@@ -20,6 +20,8 @@
 
 ## 每次必须真正分析
 
+当前CLI若提供team工具，安排至少两条独立只读审查线（WM/actor/critic优化数值；Sprite物理/真实动作评估），交换质询后主审写结论。实际GPU评估由主审去重串行执行，不让多个reviewer重复跑同checkpoint/clip/seed。若本次工具无team能力，如实记录单审和所交叉核对的证据，不虚称多人审核。
+
 读取warmstart-training.md及 `wm-validation.jsonl`。当前大WM2048×3/策略2048-1024-512-256/TF32保留；env768=3×256、CPUreplay1000/env、24env仅用于WM验证，WM训练窗口排除它们，采集normalization仍全环境更新（不称完全隔离统计验证）。窗口诊断用独立generator，不改变训练采样RNG。WM验证按全体/各clip拆1/8步root位置/姿态、q/qd、速度和actuator memory、有效count及false-alive；当count0导致rate为null只是无分母，不能虚报为0误差或训练NaN故障。物理truefailure与predfailure复用原终止，保留合法倒地。
 
 预热后joint要对照真实prefix，特别模型内收益高但真实早失败/高度漂移、成本head低估/饱和等。不仅看混合归一化loss；官方nominal尺度与本repo统计尺度不能作直接倍数比较。
