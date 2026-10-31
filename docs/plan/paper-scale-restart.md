@@ -82,3 +82,17 @@ CPU replay分配/真实4096×64启动采集与CUDA采样路径已通过，无OOM
 首20更新约.09–.096次/s，GPU总显存约6.1GiB/16GiB、PyTorch峰约1.037GiB，存在较多余量。团队只读评估确认MLP/LayerNorm/FK无batch平方项，WM与actor图顺序执行。为减少不必要分块开销，安全停止于model_000029.pt后，将WM执行批256→2048（完整论文2048窗口一起执行），PI执行批128→512（每logical4096分8块）。critic执行批8192不变。
 
 停止返回0，supervisor累计604.447193秒保留，prior仍0、soft43020/hard43200不变，不再给12h；恢复floor≥604.447193秒。旧固定source119c266分支保留，新增batch快照，所有权重/Adam状态从同一29检查点恢复，无随机重开或架构变化。重新填充replay与新形状编译仍计时；若大形状OOM只减执行分块，不能减论文logical batch。旧小时审计暂停防止维护竞态，验证后恢复同一CLI runner。
+
+
+### 2026-11-01 01:34 +08：较大执行批量验证通过
+
+固定source快照c71b9d1，恢复同一model29及累计floor604.447193秒；新12h未刷新。新的WM2048物理整批、PI512分8块（logical4096）、critic8192已实际完成update30并原子保存model_000030.pt。读盘验证229个张量有限，Adam步数WM300/PI30/critic600/costhead300，与累计30次逻辑outer一致；wm/actor逻辑batch仍2048/4096。runtime905.372秒已包含前阶段和新形状编译，GPU无OOM，PyTorch峰2.753GiB、GPU总约7GiB。证据RUN/batch-tuning-validation.json。新CLI小时runner2204241/agent2204246于01:33:38+08启动并真实读取当前证据，旧runner均已停止；仍无systemd/cron。
+
+
+## 世界模型10:1优化器计数的证据边界
+
+用户追问WM更新是否为actor十倍。当前本地实现明确每outer：采10个WM minibatch（每批2048个8步窗口），逐批各做一次Adam；actor一次logical4096/H32优化；critic5×4=20次Adam。满窗口请求数为WM10×2048×8=163840转移监督、actor4096×32=131072想象转移，真实WM有效数仍取决于reset mask，不能将optimizer计数比直接当样本量或计算量比。
+
+官方p16 TableA.5明确写“10 batches of 2048 windows per update”，另写policy updates per world-model update=1；p15 AlgorithmA.1只给拟合WM阶段与更新policy阶段，没有展开十批逐批step还是先累积十批再step。当前10次WM Adam是沿用本地成功源码、将十批按minibatch优化的实现解释，不能冒称官方已公开代码验证了10:1 Adam；也没有证据断言官方必须十批累积一次。本次只澄清证据，不凭歧义改动正在运行的健康训练。
+
+较大执行批量恢复后已推进到60次更新，无OOM/NaN；最近日志steady吞吐约.193次/s，相比小执行分块.09–.096次/s约2倍，PyTorch峰2.753GiB。WMloss约.387，模型刚开始学习；不能从训练指标宣称三动作完整成功。小时CLI审计保持运行。

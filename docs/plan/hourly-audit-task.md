@@ -20,6 +20,8 @@
 
 ## 每次必须真正分析
 
+论文计数证据边界：当前每outer WM十批分别Adam、actor一次、critic20次。TableA.5明确10×2048窗口与阶段比例1，但未无歧义展开optimizer.step次数；不要把10:1 Adam表述为已由官方代码证实，也不要凭这一措辞歧义改健康训练。详见paper-scale-restart.md末节。
+
 用户已经授权并要求按官方论文规模执行。读取 `docs/plan/paper-scale-restart.md`：WM2048×3（本Sprite接口9498764参数），policy encoder/decoder2048/1024/512/256，4096env、replay1000steps/env、WM每轮10×2048窗口、pi4096条H32轨迹、TF32。16GB适配只允许CPU replay及logical batch内microbatch累积，必须每logical WM/actor批次只做对应一次Adam/clip，critic5×4逻辑minibatch不变。不能偷偷降低logical batch、环境数或网络宽度；有资源/性能问题先按既定恢复规则核实处理。保持Sprite物理、UMR身份、随机command delay/torque lag、三个完整源和一个共享policy。新模型从头训练，早期效果退回未收敛是预期，不可拿旧10000/15551检查点冒充新网络结果。官方nominal归一化误差不能直接与本repo统计归一化loss作倍数比较。
 
 1. 读取最新训练分段日志、CSV/TensorBoard、supervisor状态、最近与较早检查点、GPU利用率/显存/温度。可用 `.venv/bin/python scripts/brief_training.py`、`scripts/training_snapshot.py`、`nvidia-smi`。原始telemetry文件不等于完成审计。
