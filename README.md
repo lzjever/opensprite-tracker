@@ -51,9 +51,15 @@ PYTHONPATH=. .venv/bin/python scripts/inspect_retarget_geometry.py \
 
 SIGTERM/SIGINT 在完整训练 outer 边界保存退出。监控只控制它创建的进程组。查看 `outputs/<run>/supervisor.json`、`train-segment-*.log`、`reviews/` 和 TensorBoard；不修改或停止其他项目。
 
-小时智能审计按用户要求使用 Codex Desktop 原生 Scheduled，完整授权、预算核算及最终交付任务见 [hourly-audit-task.md](docs/plan/hourly-audit-task.md)。旧系统服务调度已移除。当前原生任务尚待在已解锁的 Desktop 中创建并验证，不能将本说明当成已启用的调度；后台训练独立继续。原生任务须选择本 repo 的 local 模式，每小时一次，并用 Run now 验证真实执行。
+小时智能审计按用户要求使用 CLI 后台进程，每 3600 秒串行调用一次 `codex exec`，立即执行首审。完整授权、预算核算和最终交付流程见 [hourly-audit-task.md](docs/plan/hourly-audit-task.md)。在独立 tmux 会话中运行：
 
-每次实际审计报告保存在运行目录的 `hourly/latest.md`。训练结束后，任务负责同一共享检查点的三动作×三 seed 完整请求评估和 ghost 视频，整理到 `outputs/delivery/opensprite_lafan3_tracker/`，披露真实未通过项；核实交付完整后暂停原生任务。
+```bash
+tmux new-session -d -s opensprite-hourly-audit '.venv/bin/python scripts/hourly_audit.py --config configs/training.json'
+```
+
+审计有独占锁、执行日志与超时记录，API 故障不停止训练；不使用系统 service、timer、cron 或 Desktop。查看运行目录 `hourly/runner-state.json` 的状态/下次时间和 `hourly/latest.md` 的实际结论。需要机器持续开机及后台进程存活，重启后手动重启脚本。
+
+训练结束后，任务负责同一共享检查点的三动作×三 seed 完整请求评估和 ghost 视频，整理到 `outputs/delivery/opensprite_lafan3_tracker/`，披露真实未通过项；runner 核实交付完整且 trainer 停止后自动退出。
 
 逐动作评估同一 checkpoint，默认从每条第一帧运行至真实结尾，无自动 reset：
 

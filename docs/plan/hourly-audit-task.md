@@ -1,8 +1,6 @@
-# OpenSprite 原生 Scheduled 每小时智能审计任务
+# OpenSprite CLI 后台每小时智能审计任务
 
-调度只能使用 Codex Desktop 的原生 Scheduled。任务名为“OpenSprite三动作训练每小时审计”，频率每小时一次，时区 Asia/Shanghai，执行环境 local，项目目录 `/home/percy/works/robot/opensprite-tracker`。不能选隔离 worktree，因为必须读取本机正在训练的 outputs。运行目录 RUN 固定为 `outputs/train/opensprite-umr-lafan3-supermimic-20261031`。不覆盖用户模型选择。
-
-截至 2026-11-01 00:14 Asia/Shanghai，旧 systemd 调度已由主代理停用并移除；原生 Scheduled 尚未创建。Codex Desktop 已启动，但用户桌面锁定且窗口访问后端不可用，无法安全完成创建表单。此状态不得表述为小时审计已启用。训练独立继续。
+用户于 2026-11-01 明确更正：当前使用 Codex CLI，允许用 CLI 后台任务每小时审查训练数值，禁止系统 service/timer。使用本 repo 的 `scripts/hourly_audit.py` 在独立 tmux 会话中运行，每 3600 秒串行调用一次 `codex exec`，立即执行首审；无需 Desktop、Scheduled、systemd 或 cron。不覆盖用户模型选择。项目目录 `/home/percy/works/robot/opensprite-tracker`，运行目录 RUN 固定为 `outputs/train/opensprite-umr-lafan3-supermimic-20261031`。同一个 runner 独占文件锁，API 故障不影响独立训练。
 
 用户已明确授权：“如果训练进展顺利你就可以先停止工作了。后面定时每个小时审计训练进展。”本任务是继续完成既有三动作共享 tracker 的训练监控、必要纠错和最终交付，不是重新征求是否继续。正常训练保持运行。你有权读取本仓库日志/检查点、运行实际评估；只有明确故障需要时，才安全修复并在剩余原预算内恢复。不联系第三方，不干扰无关进程。
 
@@ -25,7 +23,7 @@
 3. 联合查看WM loss、每有效转移误差、末步valid fraction、成本head loss/分歧、actor/critic梯度和imagined survival。低WM误差若来自大量早失败/有效样本缩小不能当好消息；模型内收益不能代替真实表现。检查NaN/Inf/OOM/卡住/退出/重复进程以及真实文件是否继续更新。
 4. 允许每小时对**新**检查点做三clip前缀500步诊断（seed42、num-envs3）；不要为同一检查点重复跑相同诊断。示例：`.venv/bin/python -m opensprite_tracker.supermimic.evaluate --checkpoint CKPT --motion data/motions/lafan_three.npz --clip 0 --num-envs 3 --seed 42 --max-steps 500 --output RUN/hourly/STAMP/eval-clip0`，对clip1/2同样运行。明确标为prefix，不得宣称完整成功；源工具遇所有实例物理失败会提前结束，这是失败证据。
 5. 当前缀开始稳定、动作误差接近来源中实际成功表现，安排完整源评估，不用只看训练奖励决定“成熟”。来源model22000 body平均误差约3.4/4.0cm、root姿态约.10rad；其全局root位置漂移较大，所以不强加曾经撤销的rootXYZ≤.1m门槛，但必须如实报告drift。OpenSprite运动不同，来源只是解释尺度，不是假装已证明可达的验收保证。
-6. 每次用中文写结论：当前进度/预算、比上次改善或退化、三动作真实表现/评估范围、WM有效性、故障或风险、采取的动作及下一次关注项。追加 `docs/plan/training-review.md`，将报告原子写入 `RUN/hourly/<UTC>.md` 与 `RUN/hourly/latest.md`，并在原生 Scheduled 结果中给出报告路径。仅报告可在普通文档分支提交；如果当前处于固定train分支，不得在那里commit以移动其指针。
+6. 每次用中文写结论：当前进度/预算、比上次改善或退化、三动作真实表现/评估范围、WM有效性、故障或风险、采取的动作及下一次关注项。追加 `docs/plan/training-review.md`，将报告原子写入 `RUN/hourly/<UTC>.md` 与 `RUN/hourly/latest.md`，并在最终回复中给出报告路径。仅报告可在普通文档分支提交；如果当前处于固定train分支，不得在那里commit以移动其指针。
 
 ## 明确故障时的恢复
 
@@ -33,7 +31,7 @@
 - 若必须修改程序，先核实本任务supervisor/trainer的argv、cwd与进程组；只安全停止自己的supervisor，让它在outer边界保存并终止自己的trainer。不能对模糊进程名用pkill/killall，不能修改驱动/重启系统/结束别的GPU工作。
 - 在停稳且预算仍有剩余后做最小可复核修复，保留原固定源码分支，新建修正分支和唯一新train快照；不要在运行时改代码、移动旧train分支或静默改机器人/动作/奖励/网络语义。只做与实际bug相关的最短验证，不额外安排泛化测试矩阵。
 - 新supervisor保持同campaign累计ledger、prior和上限，resume floor不得低于已知正式用时；checkpoint不兼容时不得强行忽略语义检查或把随机重置说成恢复。启动修正的supervisor必须放入独立tmux/session，以免审计任务退出时误伤新训练。
-- 单纯 Codex 认证/API/工具失败不代表训练有故障；将失败记录在 RUN/hourly，保留原生 Scheduled 供下小时重试，不应由此停止健康 trainer。
+- 单纯 Codex 认证/API/工具失败不代表训练有故障；将失败记录在 RUN/hourly，保留后台 runner 供下小时重试，不应由此停止健康 trainer。
 
 ## 训练结束、无法继续或预算用尽时必须交付
 
@@ -59,14 +57,12 @@
 }
 ```
 
-核对 marker、九个 summary 的同一共享 checkpoint 字段、请求全长字段、clip×seed 覆盖以及所有本地非空文件后，在 Codex Desktop 原生 Scheduled 中暂停本任务。确认真实状态为 PAUSED；如当前执行工具无法修改 Scheduled，明确报告待暂停而不声称已经关闭。交付未完成或工具失败时记录错误，允许下次继续，不写虚假的 delivery-complete 来摆脱工作。
+核对 marker、九个 summary 的同一共享 checkpoint 字段、请求全长字段、clip×seed 覆盖以及所有本地非空文件后，在最终回复中报告交付路径。runner 会独立复核有效 marker 和训练已停止，再退出自己的后台循环。审计 agent 不终止父 runner，不创建任何新的调度。交付未完成或工具失败时记录错误，允许下次继续，不写虚假的 delivery-complete 来摆脱工作。
 
-## 原生创建与验证
+## 后台执行与验证
 
-在 Codex Desktop 侧栏 Scheduled 创建任务，使用上述名称、本项目 local 模式及每小时频率，任务 prompt 可写为“完整执行 `/home/percy/works/robot/opensprite-tracker/docs/plan/hourly-audit-task.md` 中的授权审计和交付流程；先读该文件与上次报告；健康时不改训练代码和配置”。审计 agent 直接执行工作，不启动另一个 codex CLI，不创建 systemd/cron/常驻轮询替代原生调度。
+主代理在独立 tmux 会话 `opensprite-hourly-audit` 中启动 `scripts/hourly_audit.py --config configs/training.json`。runner 获取 `RUN/hourly/audit.lock`，立即执行一次审计，然后每 3600 秒执行；任务超过间隔时不并发补跑。每次 `codex exec` 读取本文件及最新动态训练上下文，保存 stdout/stderr、snapshot、prompt、final report 及 runner 状态。agent 执行审计本身，禁止递归启动另一个 Codex 或第二个 runner。
 
-创建后必须核对界面实际 ACTIVE、下次执行时间、项目/cwd、local 执行模式和 prompt，并点击一次 Run now 验证真实任务被创建。若界面可用自动化工具，则通过应用提供的 `automation_update` 创建/更新；当前 CLI/app-server JSON schema 没有公开的 automation CRUD 方法，不可伪造工具调用或仅手写 TOML/SQLite 并宣称创建成功。
+必须核实真实 runner PID、CLI 子进程、报告内容、下次执行时间和锁，不能只凭配置文件声称启用。当前审计无法运行（认证/API/超时等）时写明错误，独立训练保持运行，下个周期重试。只有完整有效交付 marker 且本任务 trainer 已停止时 runner 自动结束。机器必须保持开机，tmux 后台进程退出或系统重启后不能承诺继续调度；重启后需要重新启动同一脚本，既有时钟和训练预算不重置。
 
-本机只读复核位置是 `$CODEX_HOME/automations/<id>/automation.toml` 及 Desktop 的 `sqlite/codex.db` / `sqlite/codex-dev.db` 中 `automations`、`automation_runs` 表。文件存在并不足以证明调度生效；还应确认 next_run_at、真实 Run now thread_id 和任务最终结果。任何存储检查都只读，不修改原生数据库或认证。每次读取原生任务 memory.md 并写简短运行记忆，避免重复评估或交付。
-
-如果上次 native run 仍在执行，避免并发审计/评估，不创建第二个 trainer。每次审计保存独立 UTC 报告并更新 latest；API 故障不停止健康训练。官方说明：[Scheduled tasks](https://learn.chatgpt.com/docs/automations?surface=app)。本地项目任务要求计算机开机并保持 Desktop 应用运行；CLI 不提供 Scheduled 管理界面。
+每次读取上次 `hourly/latest.md` 与已有评估目录，避免重复诊断和交付。不创建系统 service、timer、cron，不再依赖 Desktop 界面或原生 Scheduled 数据库，不切换正在训练的固定源码分支。
