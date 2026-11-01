@@ -8,9 +8,11 @@
 
 ## 视频与模型
 
-[![舞蹈视频预览](docs/media/dance-demo-preview.gif)](artifacts/videos/dance-model018000-full-1080p50.mp4)
+**[▶ 完整在线播放：Open sprite robot / umr / supermimic / lafan dance（哔哩哔哩）](https://b23.tv/aMs7Vw3)**
 
-动图节选了开头、失败附近和结尾三个片段，有跳剪。[完整视频](artifacts/videos/dance-model018000-full-1080p50.mp4)为1080p、50fps，覆盖全部225.66秒源轨迹。
+[![点击前往哔哩哔哩播放完整舞蹈](docs/media/dance-demo-preview.gif)](https://b23.tv/aMs7Vw3)
+
+点击上方动图可前往哔哩哔哩播放完整视频。动图节选了开头、失败附近和结尾三个片段，有跳剪。[下载原始MP4](artifacts/videos/dance-model018000-full-1080p50.mp4)：1080p、50fps，覆盖全部225.66秒源轨迹。
 
 | 文件 | 内容 |
 |---|---|

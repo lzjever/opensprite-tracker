@@ -8,9 +8,11 @@ The current task is the complete LAFAN dance **`dance2_subject1`**: **11,284 sta
 
 ## Demo and checkpoints
 
-[![Dance demo excerpts](docs/media/dance-demo-preview.gif)](artifacts/videos/dance-model018000-full-1080p50.mp4)
+**[▶ Watch the full dance on Bilibili](https://b23.tv/aMs7Vw3)**
 
-The GIF contains three separate four-second excerpts: **0–4 s, 192–196 s, and 221–225 s**. It is a jump-cut preview. Click it for the complete video. [Static poster](docs/media/dance-demo-poster.png).
+[![Watch the full dance on Bilibili](docs/media/dance-demo-preview.gif)](https://b23.tv/aMs7Vw3)
+
+The GIF contains three separate four-second excerpts: **0–4 s, 192–196 s, and 221–225 s**. It is a jump-cut preview. Click it to watch the full video on Bilibili. [Download the original MP4](artifacts/videos/dance-model018000-full-1080p50.mp4) · [Static poster](docs/media/dance-demo-poster.png).
 
 | Artifact | Status |
 |---|---|
