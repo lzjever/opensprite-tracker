@@ -34,7 +34,7 @@ Training fits a world model to real simulation transitions and differentiates im
 | Actor motion encoder | 770-dimensional future goal → **1024 / 512 / 256**, ELU → 32-dimensional tanh latent |
 | Actor decoder | 10 × 105-dimensional observation history + latent32 → **1024 / 512 / 256**, ELU → 31 actions |
 | Actor size | **3,226,943 parameters** |
-| World model | Input393 → **2048 / 2048 / 2048** →140 local state increments, SiLU + LayerNorm; **9,498,764 parameters** |
+| World model | 393 inputs → **2048 / 2048 / 2048** → 140 local state increments, SiLU + LayerNorm; **9,498,764 parameters** |
 | Critic | **1268 → 256 → 128 → 1** |
 | Cost heads | Two supervised heads, each **256 / 256** |
 | Simulation | **768 environments**, four **5 ms** physics substeps per **20 ms** control step |
