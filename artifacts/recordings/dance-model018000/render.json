@@ -1,0 +1,69 @@
+{
+  "rollout": "artifacts/recordings/dance-model018000/rollout.npz",
+  "checkpoint": "artifacts/checkpoints/model_018000.pt",
+  "iteration": 18000,
+  "clip": 0,
+  "clip_name": "dance2_subject1",
+  "title": "舞蹈  /  dance2_subject1",
+  "model": "assets/opensprite/opensprite.xml",
+  "env_index": 0,
+  "reference_start_frame": 0,
+  "start_state_index": 0,
+  "end_state_index_exclusive": 11284,
+  "requested_state_interval": [
+    0,
+    11284
+  ],
+  "fps": 50.0,
+  "source_fps": 50.0,
+  "width": 1920,
+  "height": 1080,
+  "frames": 11284,
+  "recorded_pose_frames": 11284,
+  "failure_hold_frames": 0,
+  "failure_hold_seconds": 0.0,
+  "video": "artifacts/videos/dance-model018000-full-1080p50.mp4",
+  "preview": "artifacts/recordings/dance-model018000/preview.png",
+  "preview_only": false,
+  "failure_state_index": 9688,
+  "first_failure_seconds": 193.76,
+  "continue_after_failure": true,
+  "post_failure_policy": "continue_actor",
+  "post_failure_frames_rendered": 1595,
+  "full_recorded_span_rendered": true,
+  "full_source_recorded": true,
+  "source_success_rate": 0.0,
+  "physical_failure_truncation": false,
+  "camera_start": {
+    "lookat": [
+      1.3889510877512317,
+      0.9692701001596574,
+      0.4061143261607872
+    ],
+    "distance": 2.811515979537408,
+    "azimuth": 120.0,
+    "elevation": -20.0
+  },
+  "camera_end": {
+    "lookat": [
+      0.35227877905730737,
+      1.063092405852938,
+      0.46314864541194034
+    ],
+    "distance": 4.654291704491006,
+    "azimuth": 120.0,
+    "elevation": -20.0
+  },
+  "rendering": "offline CPU MuJoCo FK + EGL, no policy or physics stepping",
+  "quality": {
+    "msaa_samples": 4,
+    "shadow_size": 4096,
+    "codec": "H264 CRF18"
+  },
+  "ghost": "identical official meshes, blue alpha.22, recorded world positions, no realignment",
+  "hud_metric_timing": "state t uses completed transition t-1; state0 unavailable; torque/speed are 20ms measured peaks",
+  "hud_font": "NotoSansCJK-Regular.ttc",
+  "source_complete_clip": true,
+  "expected_transitions": 11283,
+  "requested_transitions": 11283
+}

@@ -23,7 +23,7 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-DELIVERY = Path("outputs/delivery/opensprite_lafan3_tracker")
+DELIVERY = Path("outputs/delivery/opensprite_dance_tracker")
 
 
 def utc():
@@ -63,8 +63,10 @@ def snapshot(root, config, run):
     supervisor = read_json(run / "supervisor.json")
     prior = float(config.get("prior_training_seconds", 0))
     cap = float(config["budget_seconds"])
-    if not (math.isfinite(prior) and math.isfinite(cap) and 0 <= prior <= cap <= 43200):
-        raise ValueError("Invalid training ledger: require 0 <= prior <= cap <= 43200")
+    hard_cap = float(config.get("hard_budget_seconds", 43200))
+    if not (math.isfinite(prior) and math.isfinite(cap) and math.isfinite(hard_cap)
+            and 0 <= prior <= cap <= hard_cap <= 43200):
+        raise ValueError("Invalid training ledger: require 0 <= prior <= cap <= hard budget <= 43200")
     # active_seconds ALREADY includes prior; checkpoint runtime excludes prior.
     campaign = float(supervisor.get("active_seconds", prior))
     if not math.isfinite(campaign) or campaign < 0:
@@ -89,7 +91,7 @@ def snapshot(root, config, run):
         "prior_training_seconds": prior,
         "formal_elapsed_seconds": max(0.0, campaign - prior),
         "supervisor_soft_campaign_budget_seconds": cap,
-        "hard_total_training_budget_seconds": 43200,
+        "hard_total_training_budget_seconds": hard_cap,
         "remaining_to_supervisor_soft_limit_seconds": max(0.0, cap - campaign),
         "accounting": "campaign=supervisor.active_seconds ALREADY includes prior; checkpoint.runtime_seconds excludes prior; resume floor=campaign-prior. Never reset or enlarge the budget.",
         "latest_checkpoint": str(checkpoints[-1]) if checkpoints else None,
@@ -97,7 +99,8 @@ def snapshot(root, config, run):
     }
 
 
-def delivery_complete(root, run):
+def delivery_complete(root, run, config=None):
+    config = config or {}
     marker = run / "hourly/delivery-complete.json"
     if not marker.is_file():
         return False
@@ -106,7 +109,7 @@ def delivery_complete(root, run):
         raise ValueError("Delivery needs status=complete and honest boolean quality_pass")
     if not value.get("quality_notes") or not value.get("completed_at"):
         raise ValueError("Delivery needs quality evidence/limitations and completed_at")
-    delivery = root / DELIVERY
+    delivery = local_path(root, config.get("delivery_dir", str(DELIVERY)))
     if local_path(root, value.get("delivery_dir", "")) != delivery:
         raise ValueError("Unexpected delivery directory")
 
@@ -125,8 +128,14 @@ def delivery_complete(root, run):
     artifact(value["checkpoint"])
     artifact(value["readme"])
     reports, videos = value.get("evaluation_reports", []), value.get("videos", [])
-    if len(reports) != 9 or len(set(reports)) != 9 or len(videos) != 3 or len(set(videos)) != 3:
-        raise ValueError("Delivery needs nine distinct reports and three distinct videos")
+    clips = config.get("evaluation_clips", [0, 1, 2])
+    seeds = config.get("evaluation_seeds", [42, 43, 44])
+    expected_pairs = {(clip, seed) for clip in clips for seed in seeds}
+    video_count = int(config.get("delivery_video_count", 3))
+    if (not expected_pairs or len(reports) != len(expected_pairs)
+            or len(set(reports)) != len(expected_pairs)
+            or len(videos) != video_count or len(set(videos)) != video_count):
+        raise ValueError("Delivery needs distinct reports/videos matching the campaign configuration")
     pairs, shared = set(), set()
     for name in reports:
         result = read_json(artifact(name))
@@ -141,12 +150,12 @@ def delivery_complete(root, run):
         if result.get("num_envs") != 3:
             raise ValueError("Final evaluations must each use three environments")
     if len(shared) != 1:
-        raise ValueError("All nine summaries must evaluate the same shared checkpoint")
-    if pairs != {(clip, seed) for clip in range(3) for seed in (42, 43, 44)}:
-        raise ValueError("Final reports must cover clip 0/1/2 x seed 42/43/44")
+        raise ValueError("All summaries must evaluate the same shared checkpoint")
+    if pairs != expected_pairs:
+        raise ValueError("Final reports must cover the campaign clips and seeds")
     for name in videos:
         if artifact(name).suffix.lower() != ".mp4":
-            raise ValueError("Expected three ghost MP4 videos")
+            raise ValueError("Expected ghost MP4 videos")
     supervisor = read_json(run / "supervisor.json")
     if trainer_alive(root, supervisor) or supervisor.get("status") in ("running", "starting"):
         raise ValueError("Cannot finish auditing while training is still running")
@@ -184,7 +193,7 @@ class Launcher:
             atomic_write(attempt, content)
 
     def delivered(self):
-        return delivery_complete(self.root, self.run)
+        return delivery_complete(self.root, self.run, self.config)
 
     def audit(self):
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -208,7 +217,7 @@ class Launcher:
             task = local_path(self.root, self.args.task).read_text()
             prompt = task + "\n\n本次只读启动快照；必须重新核实动态状态：\n```json\n"
             prompt += json.dumps(context, ensure_ascii=False, indent=2) + "\n```\n"
-            prompt += f"\nUTC审计标识：{stamp}。上一报告：{self.folder / 'latest.md'}。本次最终分析将由CLI保存；必须实际分析逐clip趋势、WM有效样本和GPU/NaN，并对照上次报告。健康时不改训练源码/配置、不重复smoke。总GPU训练上限43200秒，active_seconds已含prior，不能再次相加。任务结束后独立训练继续，不要停止健康trainer。\n"
+            prompt += f"\nUTC审计标识：{stamp}。上一报告：{self.folder / 'latest.md'}。本次最终分析将由CLI保存；必须实际分析逐clip趋势、WM有效样本和GPU/NaN，并对照上次报告。健康时不改训练源码/配置、不重复smoke。总GPU训练上限{context['hard_total_training_budget_seconds']}秒，active_seconds已含prior，不能再次相加。任务结束后预算内的独立训练继续，不要停止健康trainer。\n"
             prompt_path = self.folder / f"{stamp}.prompt.md"
             atomic_write(prompt_path, prompt)
             atomic_write(self.folder / f"{stamp}.snapshot.json", json.dumps(context, ensure_ascii=False, indent=2) + "\n")
@@ -328,7 +337,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--config", default="configs/training.json")
-    parser.add_argument("--task", default="docs/plan/hourly-audit-task.md")
+    parser.add_argument("--task", default="docs/plan/hourly-audit-dance-8h-task.md")
     parser.add_argument("--codex", help="Codex executable, else CODEX_BIN/config/PATH")
     parser.add_argument("--timeout-seconds", type=float, default=3300)
     parser.add_argument("--interval-seconds", type=float, default=3600)

@@ -10,7 +10,3 @@ outputs/
 MUJOCO_LOG.TXT
 *.egg-info/
 
-
-# Locally generated motion derivatives and correspondence assets
-data/motions/
-assets/umr_correspondence/

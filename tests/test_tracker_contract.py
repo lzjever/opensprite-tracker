@@ -46,6 +46,7 @@ def test_real_one_physics_tick_delay_and_lowpass_torque():
     assert cfg.torque_time_constant_range == (0.005, 0.010)
     values = [JOINT_CONTROL[n] for n in BODY_JOINT_NAMES]
     actuator = FilteredIdealPdActuator.__new__(FilteredIdealPdActuator)
+    actuator.cfg = cfg
     actuator.stiffness = torch.tensor([[c.kp for c in values]])
     actuator.damping = torch.tensor([[c.kd for c in values]])
     actuator.force_limit = torch.tensor([[c.command_effort_nm for c in values]])

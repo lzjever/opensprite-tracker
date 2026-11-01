@@ -1,13 +1,15 @@
 """Evaluate a frozen policy in real mjlab/MuJoCo, never in the world model.
 
-python -m supermimic_x2.evaluate --checkpoint RUN/model_015000.pt \
+python -m opensprite_tracker.supermimic.evaluate --checkpoint RUN/model_030000.pt \
     --output outputs/supermimic/eval-15000-seed42 --num-envs 8 --seed 42
 
 The output directory must be new. Default: attempt every transition of --clip 0;
 stop early only if every instance has already failed (reported success 0).
 Motion paths and full-body collision default to the checkpoint configuration.
-Override with --motion FIRST.npz SECOND.npz --clip 1 --full-body-collision.
+Set --motion data/motions/lafan_dance.npz --clip 0 for the published dance.
 --max-steps is for an explicitly incomplete diagnostic, never a success result.
+--continue-after-failure records the remaining real policy rollout without reset;
+failure remains sticky and post-failure samples never enter standard scores.
 rollout.npz contains T+1 states and T transition metrics. live[t] is survival
 after arriving at state t; score_mask[t] includes the transition causing the
 first failure and excludes ALL later transitions. Quaternions are wxyz.
@@ -67,6 +69,20 @@ def new_output(path, kind):
     )
 
 
+def checkpoint_torque_lag_enabled(checkpoint):
+    """Old checkpoints default to lag-on; reject contradictory temporal metadata."""
+    saved_args = checkpoint["args"]
+    saved_args = saved_args if isinstance(saved_args, dict) else vars(saved_args)
+    disabled = saved_args.get("disable_torque_lag", False)
+    if not isinstance(disabled, bool):
+        raise ValueError("Checkpoint disable_torque_lag must be a boolean")
+    enabled = not disabled
+    declared = checkpoint.get("torque_lag_enabled", enabled)
+    if not isinstance(declared, bool) or declared != enabled:
+        raise ValueError("Contradictory checkpoint torque-lag metadata")
+    return enabled
+
+
 def load_policy(checkpoint, device="cpu", motion_override=None):
     """Own checkpoints only; infer exact architecture from weights and train args."""
     ck = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -75,7 +91,9 @@ def load_policy(checkpoint, device="cpu", motion_override=None):
 
     if (
         ck.get("method") != "SuperMimic-OpenSprite-mjlab"
-        or ck.get("robot_contract") != physical_contract()
+        or ck.get("robot_contract") != physical_contract(
+            torque_lag_enabled=checkpoint_torque_lag_enabled(ck)
+        )
     ):
         raise ValueError(
             "Checkpoint is not compatible with current native OpenSprite physics"
@@ -154,6 +172,24 @@ def require_finite_live(values, live, frame, quantity):
         )
 
 
+def evaluation_action(action, alive, continue_after_failure=False):
+    """Only the explicit visualization mode keeps acting after first failure."""
+    action = action.clamp(-20, 20)
+    return action if continue_after_failure else torch.where(
+        alive[:, None], action, torch.zeros_like(action)
+    )
+
+
+def update_survival(alive, first_failure, physical_failure, frame):
+    """A recovery of the pose never erases the first physical failure."""
+    first = alive & physical_failure & (first_failure < 0)
+    return alive & ~physical_failure, torch.where(first, frame, first_failure)
+
+
+def stop_after_all_failed(alive, continue_after_failure=False):
+    return not continue_after_failure and not bool(alive.any())
+
+
 def summarize(metrics, mask, joint_names):
     result = {
         name: scalar_stats(value, mask)
@@ -198,6 +234,10 @@ def evaluate(args):
     torch.manual_seed(args.seed)
     checkpoint = args.checkpoint.resolve(strict=True)
     pi, cfg, iteration, goal_frames = load_policy(checkpoint, args.device, args.motion)
+    torque_lag_enabled = not bool(cfg.get("disable_torque_lag", False))
+    requested_lag = getattr(args, "torque_lag", None)
+    if requested_lag is not None and requested_lag != torque_lag_enabled:
+        raise ValueError("Evaluation torque-lag setting must match the checkpoint; command delay remains enabled")
     if pi.obs_dim != OBS_DIM or pi.action_dim != len(JOINT_NAMES):
         raise ValueError(
             "checkpoint actor interface does not match current OpenSprite MDP"
@@ -221,6 +261,7 @@ def evaluate(args):
         else expected_steps
     )
     requested_steps = steps
+    continue_after_failure = getattr(args, "continue_after_failure", False)
     if steps < 1 or args.num_envs < 1:
         raise ValueError("num-envs/max-steps must be positive")
     reward_cfg = reward_config(
@@ -258,6 +299,7 @@ def evaluate(args):
         gamma=float(cfg.get("gamma", 0.99)),
         full_body_collision=full_body_collision,
         eval_clip=clip,
+        torque_lag_enabled=torque_lag_enabled,
     )
     cpu = lambda x: x.detach().cpu().numpy().copy()
     records = {
@@ -271,7 +313,7 @@ def evaluate(args):
             "live",
         )
     }
-    metrics, masks, terminated = {}, [], []
+    metrics, masks, terminated, executed_actions = {}, [], [], []
     alive = torch.ones(args.num_envs, dtype=torch.bool, device=args.device)
     first_failure = torch.full(
         (args.num_envs,), -1, dtype=torch.long, device=args.device
@@ -287,25 +329,26 @@ def evaluate(args):
             records[key].append(cpu(value))
 
     started = time.monotonic()
+    stopped_after_all_failed = False
     try:
         obs = mdp.obs(env.state(), env.a_prev, env.xi, env.f)
         if args.sensor_noise:
             obs = mdp.add_noise(obs)
+        require_finite_live((*env.state(), obs), alive, 0, "initial state/observation")
         history = obs[:, None].repeat(1, pi.hist, 1)
         record(env.state(), env.f, alive)
         for t in range(steps):
             # history already ends at s_t / frame t, including the previous command.
             action = pi(history, motion.goal(env.f, goal_frames))
-            require_finite_live((action,), alive, t, "policy action")
-            action = action.clamp(-20, 20)
-            action = torch.where(alive[:, None], action, torch.zeros_like(action))
+            checked = torch.ones_like(alive) if continue_after_failure else alive
+            require_finite_live((action,), checked, t, "policy action")
+            action = evaluation_action(action, alive, continue_after_failure)
+            executed_actions.append(cpu(action))
             before = alive.clone()
             out = env.step(action)  # advances physics AND reference exactly once
             S, frame = out["S1"], out["f1"]
-            require_finite_live((*S, out["r"]), before, t + 1, "state/reward")
-            newly_failed = before & out["term"]
-            first_failure[newly_failed] = frame[newly_failed]
-            alive = before & ~out["term"]
+            require_finite_live((*S, out["r"]), checked, t + 1, "state/reward")
+            alive, first_failure = update_survival(before, first_failure, out["term"], frame)
             masks.append(cpu(before))
             terminated.append(cpu(out["term"]))
             record(S, frame, alive)
@@ -368,20 +411,22 @@ def evaluate(args):
             )
             if "body_contact_peak_n" in out:
                 terms["body_contact_peak_n"] = out["body_contact_peak_n"]
-            require_finite_live(terms.values(), before, t + 1, "diagnostic metrics")
+            require_finite_live(terms.values(), checked, t + 1, "diagnostic metrics")
             for key, value in terms.items():
                 metrics.setdefault(key, []).append(cpu(value))
             # Noise-free observations, frozen normalization, no extra frame increment.
             obs = mdp.obs(S, action, env.xi, env.f)
             if args.sensor_noise:
                 obs = mdp.add_noise(obs)
+            require_finite_live((obs,), checked, t + 1, "observation")
             history = torch.cat((history[:, 1:], obs[:, None]), 1)
             if (t + 1) % 250 == 0 or t + 1 == steps:
                 print(
                     f"EVAL {t + 1}/{steps} alive={int(alive.sum())}/{args.num_envs}",
                     flush=True,
                 )
-            if not alive.any():
+            if stop_after_all_failed(alive, continue_after_failure):
+                stopped_after_all_failed = True
                 print(
                     f"ALL_FAILED at transition {t + 1}; no post-failure simulation needed",
                     flush=True,
@@ -439,6 +484,7 @@ def evaluate(args):
         "source_files": motion.source_files,
         "clip": clip,
         "clip_name": motion.clip_names[clip],
+        "training_clip_count": motion.num_clips,
         "ref_start": ref_start,
         "ref_end": ref_end,
         "full_body_collision": full_body_collision,
@@ -461,7 +507,14 @@ def evaluate(args):
         "requested_transitions": requested_steps,
         "executed_transitions": steps,
         "complete_clip": complete,
-        "stopped_after_all_failed": bool((failures >= 0).all()),
+        "complete_clip_interpretation": "simulation reached final source frame; success additionally requires no first failure",
+        "continue_after_failure": continue_after_failure,
+        "post_failure_policy": "continue_actor" if continue_after_failure else "zero_action_until_all_failed",
+        "auto_reset": False,
+        "reference_wrapping": False,
+        "no_reset": True,
+        "no_reference_wrapping": True,
+        "stopped_after_all_failed": stopped_after_all_failed,
         "success_rate": (
             float((failures < 0).mean())
             if complete
@@ -474,7 +527,11 @@ def evaluate(args):
         "action_noise": False,
         "sensor_noise": args.sensor_noise,
         "domain_randomization": args.randomize,
-        "actuator_delay": "baseline actuator/delay dynamics retained; seed supplied",
+        "actuator_delay": (
+            "baseline actuator/delay dynamics retained; seed supplied" if torque_lag_enabled
+            else "command delay retained; first-order torque lag disabled; seed supplied"
+        ),
+        "torque_lag_enabled": torque_lag_enabled,
         "score_mask": "alive before transition; first failure included, all later samples excluded",
         "live": "alive after arriving at stored state; final clip completion is not failure",
         "torque_speed_sampling": "maximum absolute value over four physics substeps (plus endpoint speed)",
@@ -501,6 +558,7 @@ def evaluate(args):
     arrays = {
         **records,
         "score_mask": score_mask,
+        "action": np.stack(executed_actions),
         "terminated": np.stack(terminated),
         "ref_local_frame": local_frames,
         "time_seconds": local_frames * CONTROL_DT,
@@ -567,10 +625,16 @@ def parser():
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--num-envs", type=int, default=8)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--torque-lag", action=argparse.BooleanOptionalAction, default=None,
+                   help="optional checkpoint-consistency assertion; command delay is always retained")
     p.add_argument(
         "--max-steps",
         type=int,
         help="diagnostic only; success_rate=null unless full clip",
+    )
+    p.add_argument(
+        "--continue-after-failure", action="store_true",
+        help="record real policy simulation through the requested reference after failure; standard scores stay first-failure masked",
     )
     p.add_argument("--contact-threshold", type=float, default=10.0)
     p.add_argument(

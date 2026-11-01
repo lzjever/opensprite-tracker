@@ -2,8 +2,8 @@
 from pathlib import Path
 import numpy as np
 from retarget.processing import HUMAN_Y_UP_TO_ROBOT_Z_UP as C, strict_float32_angles
-from retarget.yy.bvh_adapters import read_transforms
-from retarget.yy.motion_postprocess import output_times
+from retarget.bvh_tools.bvh_adapters import read_transforms
+from retarget.bvh_tools.motion_postprocess import output_times
 
 
 def test_geno_translation_channels_replace_offsets(tmp_path):

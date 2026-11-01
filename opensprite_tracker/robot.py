@@ -2,7 +2,6 @@
 
 PD gains and torque lag are explicit simulation choices: the public asset does
 not publish tuned controller gains or an identified actuator response model.
-No X2 physical constants are used.
 """
 from dataclasses import dataclass
 from pathlib import Path

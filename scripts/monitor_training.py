@@ -10,6 +10,7 @@ import argparse
 from datetime import datetime, timezone
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -33,11 +34,16 @@ def latest_checkpoint(run):
 
 def with_resume(command, checkpoint, elapsed):
     command = list(command)
-    for key in ("--resume", "--resume-runtime-seconds-floor", "--initialize-from", "--world-model-from"):
+    for key in ("--resume", "--resume-runtime-seconds-floor", "--initialize-from", "--world-model-from", "--resume-budget-record"):
         while key in command:
             index = command.index(key)
             del command[index:index+2]
     return command + ["--resume", str(checkpoint), "--resume-runtime-seconds-floor", str(elapsed)]
+
+
+def stop_grace_seconds(hard_cap, elapsed):
+    """Never give shutdown more than the campaign's remaining hard budget."""
+    return min(180.0, max(0.0, hard_cap - elapsed))
 
 
 def previous_child_alive(previous):
@@ -67,7 +73,9 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         raise SystemExit("Another supervisor already owns this run directory")
-    if float(cfg["budget_seconds"]) <= 0 or float(cfg.get("review_seconds", 3600)) <= 0:
+    hard_cap = float(cfg.get("hard_budget_seconds", float(cfg["budget_seconds"]) + 180))
+    if (not math.isfinite(hard_cap) or hard_cap < float(cfg["budget_seconds"])
+            or float(cfg["budget_seconds"]) <= 0 or float(cfg.get("review_seconds", 3600)) <= 0):
         raise ValueError("Budget and review interval must be positive")
     state_path = run / "supervisor.json"
     previous = json.loads(state_path.read_text()) if state_path.exists() else {}
@@ -141,17 +149,18 @@ def main():
                         except subprocess.TimeoutExpired:
                             announce("[REVIEW] telemetry timed out; training continues")
                         next_review += review_interval
+                        elapsed = before + time.monotonic() - started
                     if elapsed >= float(cfg["budget_seconds"]) or stopping:
                         announce("[STOP] supervisor budget or stop request; requesting checkpoint at outer boundary")
                         os.killpg(child.pid, signal.SIGTERM)
                         try:
-                            child.wait(timeout=180)
+                            child.wait(timeout=stop_grace_seconds(hard_cap, elapsed))
                         except subprocess.TimeoutExpired:
-                            announce("[STOP] child did not stop within 180s; terminating owned process group")
+                            announce("[STOP] checkpoint grace expired within hard budget; terminating owned process group")
                             os.killpg(child.pid, signal.SIGKILL)
                             child.wait()
                         break
-                    time.sleep(5)
+                    time.sleep(min(5.0, max(0.0, float(cfg["budget_seconds"]) - elapsed)))
                 elapsed = before + time.monotonic() - started
             state.update(active_seconds=elapsed, returncode=child.returncode)
             if child.returncode == 0 or stopping or elapsed >= float(cfg["budget_seconds"]):

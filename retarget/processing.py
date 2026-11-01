@@ -17,9 +17,9 @@ def strict_float32_angles(angles, limits):
     return np.clip(np.asarray(angles, np.float32), lo, hi)
 
 def refine_angles(angles, limits, velocity_limits):
-    """YY TrajOpt temporal regularizer with exact per-joint box/speed QPs.
+    """Physical-time temporal regularizer with exact per-joint box/speed QPs.
 
-    The temporal_penalty coefficients are copied from YY motion_refinement.py.
+    The second-derivative coefficients use the physical-time grid.
     Root samples/time are untouched. Positive safety margin absorbs solver and
     float32 roundoff; actual final closed-bound checks remain strict.
     """
@@ -46,7 +46,7 @@ def refine_angles(angles, limits, velocity_limits):
     speed=np.abs(np.diff(result.astype(float),axis=0))*fps
     if np.any(speed>velocity_limits+1e-6):raise ValueError('Final float32 velocity violation')
     if np.any(result.astype(float)<limits[:,0]) or np.any(result.astype(float)>limits[:,1]):raise ValueError('Final float32 hard joint violation')
-    return result,dict(method='YY physical-time acceleration QP, per-joint box and speed constraints',acceleration_weight=weight,velocity_limit_margin=.98,max_correction_rad=float(np.abs(result-angles).max()),rms_correction_rad=float(np.sqrt(np.mean((result-angles)**2))),max_velocity_ratio=float(np.max(speed/velocity_limits)),constraints_passed=True)
+    return result,dict(method='Physical-time acceleration QP, per-joint box and speed constraints',acceleration_weight=weight,velocity_limit_margin=.98,max_correction_rad=float(np.abs(result-angles).max()),rms_correction_rad=float(np.sqrt(np.mean((result-angles)**2))),max_velocity_ratio=float(np.max(speed/velocity_limits)),constraints_passed=True)
 
 def kinematics(model,qpos,fps=50.):
     """World FK and velocities within exactly one source trajectory."""

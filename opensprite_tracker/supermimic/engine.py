@@ -1,6 +1,6 @@
 """SuperMimic equations 1--3, with no PPO or simulator differentiation.
 
-Robot-independent loop adapted from supermimic_vibed; see THIRD_PARTY_LICENSE.txt.
+MIT-licensed algorithm utility; see THIRD_PARTY_LICENSE.txt.
 """
 
 from __future__ import annotations
@@ -196,6 +196,9 @@ class Learner:
         # One sampled logical batch and one Adam step, regardless of partition.
         batch = self.args.wm_batch
         window = self.buffer.sample_windows(batch, self.args.wm_window)
+        audit = getattr(self, "coverage_audit", None)
+        if audit is not None:
+            audit.wm(window)
         scale = torch.maximum(self.wm.out_norm.std(), self.error_floor)
         self.opt_wm.zero_grad(set_to_none=True)
         loss_sum = scale.new_zeros(())
@@ -209,7 +212,7 @@ class Learner:
             )
             mask = part["mask"]
             loss = (error * mask).sum() / batch
-            loss.backward()
+            (loss * getattr(self.args, "wm_loss_scale", 1.0)).backward()
             loss_sum += loss.detach()
             valid_error += (error.detach() * mask).sum()
             valid_count += mask.sum()
@@ -323,7 +326,49 @@ class Learner:
     def _critic_input(self, state, frame, xi_n, goal):
         return torch.cat((self.mdp.critic_features(state, frame, xi_n), goal), -1)
 
+    def _failure_replay_starts(self):
+        """Keep the requested mixture AFTER the existing source-H rejection.
+
+        Uniform proposals still use the original all-env sampler and history
+        rules. Empty/insufficient priority banks are filled with uniform starts.
+        """
+        batch = self.args.pi_batch
+        quota = int(batch * self.buffer.failure_replay_fraction)
+        if not hasattr(self, "_failure_frame_ends"):
+            self._failure_frame_ends = self.motion.clip_end[self.motion.clip_id].to(self.buffer.storage_device)
+        starts, histories = [], []
+        for _ in range(16):
+            start, history = self.buffer.sample_starts(2 * batch, self.args.hist,
+                priority_frame_ends=self._failure_frame_ends, priority_horizon=self.args.horizon)
+            end = self.motion.clip_end[self.motion.clip_id[start["f"]]]
+            eligible = start["f"] + self.args.horizon <= end
+            if starts:
+                # First proposal already draws >=quota or exhausts the legal
+                # priority bank without replacement. Later proposals ONLY add
+                # ordinary uniform starts, never duplicate a scarce anchor.
+                eligible &= ~start["_failure_priority"]
+            valid = eligible.nonzero().squeeze(-1)
+            starts.append({key: value[valid] for key, value in start.items()})
+            histories.append({key: value[valid] for key, value in history.items()})
+            if sum(len(part["f"]) for part in starts) < batch:
+                continue
+            cat = lambda parts: {key: torch.cat([part[key] for part in parts]) for key in parts[0]}
+            pooled, pooled_history = cat(starts), cat(histories)
+            flags = pooled["_failure_priority"]
+            priority = flags.nonzero().squeeze(-1)[:quota]
+            uniform = (~flags).nonzero().squeeze(-1)[:batch-len(priority)]
+            if len(priority) + len(uniform) != batch:
+                continue
+            selected = torch.cat((priority, uniform))
+            self.buffer.failure_replay_stats["actor_priority_accepted"] += len(priority)
+            self.buffer.failure_replay_stats["actor_total_accepted"] += batch
+            return ({key: value[selected] for key, value in pooled.items()},
+                    {key: value[selected] for key, value in pooled_history.items()})
+        raise RuntimeError("Replay has no valid H-step motion starts for failure mixture")
+
     def sample_valid_starts(self):
+        if getattr(self.buffer, "failure_replay_fraction", 0) > 0:
+            return self._failure_replay_starts()
         batch, starts, histories, remaining = (
             self.args.pi_batch,
             [],
@@ -472,6 +517,9 @@ class Learner:
         # Draw the complete logical batch ONCE. Each partition contributes its
         # sum divided by the SAME logical denominator before one optimizer step.
         start, history = self.sample_valid_starts()
+        audit = getattr(self, "coverage_audit", None)
+        if audit is not None:
+            audit.actor(start)
         batch = args.pi_batch
         device = next(self.pi.parameters()).device
         storage = torch.device("cpu") if getattr(args, "critic_storage", "device") == "cpu" else device

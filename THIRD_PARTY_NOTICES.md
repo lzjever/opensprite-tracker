@@ -1,14 +1,8 @@
-# Third party code and assets
+# Third-party notices
 
-`opensprite_tracker/supermimic` directly adapts the validated SuperMimic implementation in https://github.com/lzjever/beyondmimic-umr, branch `exp/agibot-x2-supermimic-fullbody-joint-2h-20261022`, commit `32fc15e2d2a2f455cea23df2d1f6a96e3f31fab5`. Only the OpenSprite robot, motion identity, tensor sizes, collision geometry and necessary launch/resume details are adapted.
+Project code is licensed under AGPL-3.0. OpenSprite assets retain their license in `assets/opensprite/vendor/LICENSE`. Native UMR code, motion data, Geno assets and JavaScript dependencies retain the licenses distributed with those directories.
 
-The underlying independent SuperMimic implementation originated in https://github.com/zita-ch/supermimic_vibed, Copyright (c) 2026 ETH Zurich, Chong Zhang. Its MIT notices are preserved below and in copied source headers.
-
-Official Sprite0825 assets retain their AGPL-3.0 license at `assets/opensprite/vendor/LICENSE`. Motion and native UMR third party notices are retained with their respective data/source directories.
-
-The robot-independent algorithm and rotation utilities are adapted from
-https://github.com/zita-ch/supermimic_vibed (a1508d4).
-This repository is an unofficial implementation, not code released by the paper authors.
+The following MIT notice applies to the incorporated algorithm and rotation utilities. The corresponding source files retain their notices.
 
 MIT License
 

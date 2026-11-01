@@ -1,1 +1,1 @@
-"""SuperMimic methodology on mjlab and Agibot X2 Ultra (single-motion study)."""
+"""SuperMimic whole-body tracking for the OpenSprite single-dance task."""

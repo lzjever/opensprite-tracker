@@ -1,0 +1,113 @@
+{
+  "motion": "dance2_subject1",
+  "retarget_method": "umr_native_nr_surface_vector_v1",
+  "robot_model": "opensprite0825",
+  "dataset_revision": "opensprite-umr-geno-v1-20261031",
+  "source_frames": 13541,
+  "output_frames": 11284,
+  "fps": 50.0,
+  "duration_seconds": 225.68,
+  "native_roundoff_residual_count": 5824,
+  "native_geometry": {
+    "minimum_collision_z_m": -0.01329756778341529,
+    "minimum_ground_time_s": 90.918485,
+    "ground_fraction_below_minus_1cm": 0.00945277305959678,
+    "self_minimum_signed_distance_m": -0.04293995945487768,
+    "self_worst_time_s": 129.969266,
+    "self_fraction_below_minus_1cm": 0.03256775718189203,
+    "self_fraction_below_minus_3cm": 0.0011077468429214977,
+    "all_body_gap_over_2cm_seconds": 3.316733,
+    "all_body_gap_longest_seconds": 0.533344,
+    "worst_self_pairs": {
+      "right_wrist_yaw_link_primitive_collision / pelvis_link_primitive_collision": -0.04293995945487768,
+      "left_wrist_yaw_link_primitive_collision / pelvis_link_primitive_collision": -0.03114785995073141,
+      "right_hip_roll_link_primitive_collision / right_wrist_yaw_link_primitive_collision": -0.02471535221850009,
+      "left_hip_roll_link_primitive_collision / left_wrist_yaw_link_primitive_collision": -0.024083670548475357,
+      "right_hip_roll_link_primitive_collision / right_wrist_roll_link_primitive_collision": -0.023372857260602235,
+      "right_elbow_link_primitive_collision / pelvis_link_primitive_collision": -0.020010031419185805,
+      "left_elbow_link_primitive_collision / pelvis_link_primitive_collision": -0.019626438887880758,
+      "right_hip_roll_link_primitive_collision / right_elbow_link_primitive_collision": -0.019349557614675696,
+      "left_wrist_roll_link_primitive_collision / right_elbow_link_primitive_collision": -0.018898825775484424,
+      "right_shoulder_yaw_link_primitive_collision / waist_yaw_link_primitive_collision": -0.01852540463025446
+    }
+  },
+  "final_geometry": {
+    "minimum_collision_z_m": 0.0005000807656512282,
+    "minimum_ground_time_s": 110.62,
+    "ground_fraction_below_minus_1cm": 0.0,
+    "self_minimum_signed_distance_m": -0.04370053334967451,
+    "self_worst_time_s": 129.96,
+    "self_fraction_below_minus_1cm": 0.04262672811059908,
+    "self_fraction_below_minus_3cm": 0.0012406947890818859,
+    "all_body_gap_over_2cm_seconds": 3.36,
+    "all_body_gap_longest_seconds": 0.54,
+    "worst_self_pairs": {
+      "right_wrist_yaw_link_primitive_collision / pelvis_link_primitive_collision": -0.04370053334967451,
+      "right_hip_roll_link_primitive_collision / right_wrist_roll_link_primitive_collision": -0.03359800364965358,
+      "left_wrist_yaw_link_primitive_collision / pelvis_link_primitive_collision": -0.031107745607752604,
+      "left_hip_roll_link_primitive_collision / left_wrist_roll_link_primitive_collision": -0.025550899496401873,
+      "left_hip_yaw_link_primitive_collision / left_wrist_roll_link_primitive_collision": -0.02448207574712018,
+      "left_hip_roll_link_primitive_collision / left_wrist_yaw_link_primitive_collision": -0.024260719202014273,
+      "right_hip_yaw_link_primitive_collision / right_wrist_roll_link_primitive_collision": -0.023887866948789725,
+      "right_hip_roll_link_primitive_collision / right_wrist_yaw_link_primitive_collision": -0.02358319224305641,
+      "right_knee_link_primitive_collision / right_wrist_roll_link_primitive_collision": -0.022381566132927046,
+      "left_hip_roll_link_primitive_collision / left_wrist_pitch_link_primitive_collision": -0.022368273640983077
+    }
+  },
+  "ground_correction": {
+    "method": "small capped primitive world-Z residual QP after native UMR and joint-speed refinement",
+    "maximum_correction_m": 0.013316256486261944,
+    "mean_correction_m": 0.0032922965345884127,
+    "p95_correction_m": 0.007662960192418541,
+    "maximum_allowed_m": 0.03,
+    "minimum_collision_z_before_m": -0.012816156486261944,
+    "clearance_m": 0.0005
+  },
+  "resampling": {
+    "source_fps": 59.998800023999515,
+    "target_fps": 50.0,
+    "source_frames": 13541,
+    "output_frames": 11284,
+    "source_last_sample_seconds": 225.67118000000002,
+    "output_last_sample_seconds": 225.66,
+    "anti_alias_filter": {
+      "enabled": true,
+      "applied": true,
+      "kind": "symmetric Kaiser FIR",
+      "passband_edge_hz": 20.0,
+      "cutoff_hz": 22.5,
+      "stopband_edge_hz": 25.0,
+      "design_attenuation_db": 60,
+      "taps": 45,
+      "kaiser_beta": 5.65326,
+      "boundary": "reflect without repeating endpoints",
+      "boundary_affected_seconds_each_end": 0.36667400000000006,
+      "group_delay_seconds": 0.0,
+      "delay_handling": "centered offline convolution removes the FIR group delay"
+    },
+    "rotation_filter": "center-frame local SO(3) logarithm FIR, then exponential",
+    "maximum_window_relative_rotation_degrees": 179.8836803407659,
+    "rotation_log_near_branch_cut": true,
+    "interpolation": "linear xyz/finite hinge angles; root quaternion SLERP",
+    "hinge_unwrap": false,
+    "joint_limit_clipping": false,
+    "native_joint_limits": {
+      "outside_frame_joint_count": 0,
+      "max_excess_radians": 0.0
+    },
+    "resampled_joint_limits": {
+      "outside_frame_joint_count": 6342,
+      "max_excess_radians": 0.004424991857052085
+    }
+  },
+  "refinement": {
+    "method": "Physical-time acceleration QP, per-joint box and speed constraints",
+    "acceleration_weight": 1e-07,
+    "velocity_limit_margin": 0.98,
+    "max_correction_rad": 0.06431690990405758,
+    "rms_correction_rad": 0.005491696337035269,
+    "max_velocity_ratio": 0.9800023154208535,
+    "constraints_passed": true
+  },
+  "semantic_self_contact_map": "disabled_by_native_NR_uniform_source_path"
+}

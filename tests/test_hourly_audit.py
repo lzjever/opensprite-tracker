@@ -90,15 +90,19 @@ def test_lifetime_lock_prevents_second_launcher_even_between_runs(campaign):
         process.wait(timeout=5)
 
 
-def test_delivery_requires_full_requests_shared_model_and_local_files(campaign):
+@pytest.mark.parametrize("single_clip", [False, True])
+def test_delivery_requires_full_requests_shared_model_and_local_files(campaign, single_clip):
     root, run, _, _ = campaign
-    delivery = root / audit.DELIVERY
+    clips = [0] if single_clip else list(range(3))
+    config = {"delivery_dir": "outputs/delivery/getup", "evaluation_clips": clips,
+              "delivery_video_count": 0} if single_clip else {}
+    delivery = root / config.get("delivery_dir", audit.DELIVERY)
     delivery.mkdir(parents=True)
     (run / "hourly").mkdir()
     for name in ("checkpoint.pt", "README.md", "clip0.mp4", "clip1.mp4", "clip2.mp4"):
         (delivery / name).write_bytes(b"actual artifact fixture")
     reports = []
-    for clip in range(3):
+    for clip in clips:
         for seed in (42, 43, 44):
             path = delivery / f"clip{clip}-seed{seed}.json"
             path.write_text(json.dumps({"clip": clip, "seed": seed, "checkpoint": str(delivery / "checkpoint.pt"),
@@ -108,23 +112,37 @@ def test_delivery_requires_full_requests_shared_model_and_local_files(campaign):
     marker = {"status": "complete", "quality_pass": False, "quality_notes": "Failed early honestly reported",
               "completed_at": "2026-11-01T00:00:00Z", "delivery_dir": str(delivery),
               "checkpoint": str(delivery / "checkpoint.pt"), "readme": str(delivery / "README.md"),
-              "evaluation_reports": reports, "videos": [str(delivery / f"clip{i}.mp4") for i in range(3)]}
+              "evaluation_reports": reports,
+              "videos": [] if single_clip else [str(delivery / f"clip{i}.mp4") for i in range(3)]}
     (run / "hourly/delivery-complete.json").write_text(json.dumps(marker))
-    assert audit.delivery_complete(root, run)  # Completion can honestly fail quality.
+    assert audit.delivery_complete(root, run, config)  # Completion can honestly fail quality.
     report = Path(reports[0])
     original = report.read_text()
     value = json.loads(original)
     value["requested_transitions"] = 500
     report.write_text(json.dumps(value))
     with pytest.raises(ValueError, match="prefix"):
-        audit.delivery_complete(root, run)
+        audit.delivery_complete(root, run, config)
     value["requested_transitions"] = 1000
     value["checkpoint"] = str(delivery / "another.pt")
     report.write_text(json.dumps(value))
     with pytest.raises(ValueError, match="same shared"):
-        audit.delivery_complete(root, run)
+        audit.delivery_complete(root, run, config)
     report.write_text(original)
-    (delivery / "clip0.mp4").unlink()
-    (delivery / "clip0.mp4").symlink_to(delivery / "clip1.mp4")
+    artifact = delivery / ("README.md" if single_clip else "clip0.mp4")
+    artifact.unlink()
+    artifact.symlink_to(delivery / "clip1.mp4")
     with pytest.raises(ValueError, match="symlink"):
-        audit.delivery_complete(root, run)
+        audit.delivery_complete(root, run, config)
+
+
+def test_four_hour_campaign_uses_its_own_hard_limit(campaign):
+    root, run, _, _ = campaign
+    cfg = {"budget_seconds": 14220, "hard_budget_seconds": 14400,
+           "prior_training_seconds": 0}
+    value = audit.snapshot(root, cfg, run)
+    assert value["hard_total_training_budget_seconds"] == 14400
+    assert value["remaining_to_supervisor_soft_limit_seconds"] == 11120
+    cfg["budget_seconds"] = 43020
+    with pytest.raises(ValueError, match="hard budget"):
+        audit.snapshot(root, cfg, run)

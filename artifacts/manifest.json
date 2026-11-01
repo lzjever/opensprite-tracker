@@ -1,0 +1,117 @@
+{
+  "schema": "opensprite-release-artifacts-v1",
+  "motion": {
+    "name": "dance2_subject1",
+    "path": "data/motions/lafan_dance.npz",
+    "frames": 11284,
+    "transitions": 11283,
+    "fps": 50,
+    "last_state_seconds": 225.66
+  },
+  "checkpoints": [
+    {
+      "path": "artifacts/checkpoints/model_030000.pt",
+      "iteration": 30000,
+      "role": "latest_locked_intermediate_snapshot",
+      "training_runtime_seconds": 21082.89282969013,
+      "training_runtime_hours": 5.856359119358369,
+      "authorized_training_budget_hours": 8,
+      "is_completed_budget_final": false,
+      "evaluation_note": "No evaluation of this snapshot is bundled; the video uses iteration 18000."
+    },
+    {
+      "path": "artifacts/checkpoints/model_018000.pt",
+      "iteration": 18000,
+      "role": "snapshot_used_for_bundled_full_recording"
+    }
+  ],
+  "recording": {
+    "checkpoint": "artifacts/checkpoints/model_018000.pt",
+    "rollout": "artifacts/recordings/dance-model018000/rollout.npz",
+    "summary": "artifacts/recordings/dance-model018000/summary.json",
+    "render_info": "artifacts/recordings/dance-model018000/render.json",
+    "verification": "artifacts/recordings/dance-model018000/verification.json",
+    "preview": "artifacts/recordings/dance-model018000/preview.png",
+    "reproduction_instructions": "artifacts/recordings/dance-model018000/README.md",
+    "video": "artifacts/videos/dance-model018000-full-1080p50.mp4",
+    "seed": 42,
+    "num_envs": 1,
+    "first_failure_seconds": 193.76,
+    "standard_success_rate": 0.0,
+    "continue_after_failure": true,
+    "post_failure_policy": "continue_actor",
+    "no_reset": true,
+    "no_reference_wrapping": true,
+    "failure_hold_frames": 0,
+    "simulated_transitions": 11283,
+    "recorded_states": 11284,
+    "last_state_seconds": 225.66,
+    "video_duration_seconds": 225.68,
+    "width": 1920,
+    "height": 1080,
+    "fps": 50,
+    "video_frames": 11284,
+    "interpretation": "The full recording includes real post-failure actor/physics behavior. Full simulation does not mean successful tracking; standard scores stop after the first-failure transition.",
+    "release_metadata_note": "Only path metadata was relocated to repository-relative paths. All 78 non-metadata arrays preserve original dtype, shape and values. The render system font is recorded by filename.",
+    "rerender_argv": [
+      ".venv/bin/python",
+      "-m",
+      "opensprite_tracker.supermimic.render",
+      "--rollout",
+      "artifacts/recordings/dance-model018000/rollout.npz",
+      "--output",
+      "outputs/rerender-dance-model018000",
+      "--model",
+      "assets/opensprite/opensprite.xml",
+      "--env-index",
+      "0",
+      "--width",
+      "1920",
+      "--height",
+      "1080",
+      "--fps",
+      "50",
+      "--include-post-failure"
+    ]
+  },
+  "verification": {
+    "existing_recording_integrity": "pass",
+    "existing_recording_checks_passed": 63,
+    "release_arrays_unchanged_except_metadata_json": 78,
+    "new_simulation_or_render_performed_for_packaging": false
+  },
+  "files": {
+    "artifacts/checkpoints/model_030000.pt": {
+      "bytes": 162589549,
+      "sha256": "35cbe95ed3387339ee9ec4b29d15f037f20abc582feb185e5edc53472d395031"
+    },
+    "artifacts/checkpoints/model_018000.pt": {
+      "bytes": 162589549,
+      "sha256": "a39dd9246f46150e76be9fd226b598216a1870f4615f3203ece95e4abd0c60e5"
+    },
+    "artifacts/recordings/dance-model018000/rollout.npz": {
+      "bytes": 16471467,
+      "sha256": "65fd1e97a004d13f4c88796d6c2366eee18a40e96eaca258a5098007529b9821"
+    },
+    "artifacts/recordings/dance-model018000/summary.json": {
+      "bytes": 98112,
+      "sha256": "9601335392e72107a538192534e043a03fde8f8b6a77c88e4a66d904e014cfb0"
+    },
+    "artifacts/recordings/dance-model018000/render.json": {
+      "bytes": 2054,
+      "sha256": "681613413289ee7af3964f491fe354cda59b698c56eb0b973866315bb5b40068"
+    },
+    "artifacts/recordings/dance-model018000/verification.json": {
+      "bytes": 4388,
+      "sha256": "c276362ed5fe152f34068095e9b591237245e4c77244b1defde16533de44c4cc"
+    },
+    "artifacts/recordings/dance-model018000/preview.png": {
+      "bytes": 419297,
+      "sha256": "6615ab3df06cd787644dedf060e339b04d5f29132d2bd34b59218662d29fc7bc"
+    },
+    "artifacts/videos/dance-model018000-full-1080p50.mp4": {
+      "bytes": 158168254,
+      "sha256": "33e738a926e083288e3186b398ed763536407cfe7c3e9cb0dd61edfa949039e1"
+    }
+  }
+}

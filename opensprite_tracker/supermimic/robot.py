@@ -14,7 +14,7 @@ from opensprite_tracker.robot import (
 from opensprite_tracker.task import robot_cfg
 
 MJCF_PATH = ROBOT_XML
-MOTION_PATH = ROOT / "data/motions/lafan_three.npz"
+MOTION_PATH = ROOT / "data/motions/lafan_dance.npz"
 LAFAN_PATH = MOTION_PATH
 JOINT_NAMES = BODY_JOINT_NAMES
 TRACKED_BODIES = TRACKED_BODY_NAMES
@@ -60,7 +60,7 @@ def velocity_limits(device="cpu", dtype=torch.float32):
     )
 
 
-def context_normalization(device="cpu", dtype=torch.float32):
+def context_normalization(device="cpu", dtype=torch.float32, *, torque_lag_enabled=True):
     offset = torch.zeros(CONTEXT_DIM, device=device, dtype=dtype)
     scale = torch.ones_like(offset)
     offset[0] = 0.775
@@ -92,17 +92,18 @@ def context_normalization(device="cpu", dtype=torch.float32):
         nominal = torch.tensor(values, device=device, dtype=dtype)
         offset[CONTEXT_SLICES[key]] = nominal
         scale[CONTEXT_SLICES[key]] = nominal.abs().clamp_min(0.001) * 0.3
-    offset[CONTEXT_SLICES["torque_time_constant"]] = 0.0075
-    scale[CONTEXT_SLICES["torque_time_constant"]] = 0.0025
+    offset[CONTEXT_SLICES["torque_time_constant"]] = 0.0075 if torque_lag_enabled else 0.0
+    scale[CONTEXT_SLICES["torque_time_constant"]] = 0.0025 if torque_lag_enabled else 1.0
     return offset, scale
 
 
-def make_env_cfg(num_envs=1, seed=42, randomize=True, full_body_collision=True):
+def make_env_cfg(num_envs=1, seed=42, randomize=True, full_body_collision=True,
+                 *, torque_lag_enabled=True):
     from mjlab.tasks.tracking.tracking_env_cfg import make_tracking_env_cfg
     from mjlab.sensor import ContactSensorCfg, ContactMatch
 
     cfg = make_tracking_env_cfg()
-    cfg.scene.entities = {"robot": robot_cfg()}
+    cfg.scene.entities = {"robot": robot_cfg(torque_lag_enabled=torque_lag_enabled)}
     cfg.scene.num_envs = num_envs
     cfg.seed = seed
     cfg.scene.terrain = replace(
@@ -240,7 +241,7 @@ def make_kinematics(device="cpu", full_body_collision=True):
     )
 
 
-def physical_contract():
+def physical_contract(*, torque_lag_enabled=True):
     from opensprite_tracker.constants import (
         ACTUATOR_TEMPORAL_REVISION,
         TORQUE_TIME_CONSTANT_RANGE_S,
@@ -251,7 +252,7 @@ def physical_contract():
     )
 
     m = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
-    return {
+    contract = {
         "robot": "opensprite0825",
         "joints": JOINT_NAMES,
         "bodies": TRACKED_BODIES,
@@ -271,9 +272,13 @@ def physical_contract():
         "physics_dt": PHYSICS_DT,
         "policy_dt": CONTROL_DT,
         "action_scale": ACTION_SCALE,
-        "temporal_model": ACTUATOR_TEMPORAL_REVISION,
-        "torque_tau_range": TORQUE_TIME_CONSTANT_RANGE_S,
+        "temporal_model": ACTUATOR_TEMPORAL_REVISION if torque_lag_enabled else ACTUATOR_TEMPORAL_REVISION + "_no_torque_lag_v1",
+        "torque_tau_range": TORQUE_TIME_CONSTANT_RANGE_S if torque_lag_enabled else (0.0, 0.0),
         "delay_physics_ticks": (COMMAND_DELAY_MIN_TICKS, COMMAND_DELAY_MAX_TICKS),
         "delay_hold_probability": COMMAND_DELAY_HOLD_PROBABILITY,
         "delay_refresh_physics_ticks": COMMAND_DELAY_REFRESH_TICKS,
     }
+    # Keep the exact legacy dictionary when lag is on, for old checkpoints.
+    if not torque_lag_enabled:
+        contract["torque_lag_enabled"] = False
+    return contract

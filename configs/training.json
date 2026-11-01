@@ -1,17 +1,18 @@
 {
-  "run_dir": "outputs/train/opensprite-umr-lafan3-warmstart-20261101",
-  "budget_seconds": 43020,
-  "prior_training_seconds": 2244.928498502355,
+  "run_dir": "outputs/train/opensprite-dance-no-torque-lag-cold-8h-20261101",
+  "budget_seconds": 28620,
+  "hard_budget_seconds": 28800,
+  "prior_training_seconds": 0,
   "review_seconds": 3600,
   "max_restarts": 1,
-  "source_branch": "train/opensprite-umr-lafan3-warmstart-20261101-joint",
+  "source_branch": "train/opensprite-dance-no-torque-lag-cold-8h-20261101",
   "command": [
     ".venv/bin/python",
     "scripts/train_opensprite.py",
     "--output",
-    "outputs/train/opensprite-umr-lafan3-warmstart-20261101",
+    "outputs/train/opensprite-dance-no-torque-lag-cold-8h-20261101",
     "--motion",
-    "data/motions/lafan_three.npz",
+    "data/motions/lafan_dance.npz",
     "--dataset-revision",
     "opensprite-umr-geno-v1-20261031",
     "--full-body-collision",
@@ -22,7 +23,7 @@
     "--iterations",
     "320000",
     "--max-wall-seconds",
-    "40775.071501497645",
+    "28620",
     "--buffer-steps",
     "1000",
     "--utd",
@@ -44,7 +45,6 @@
     "--wm-width",
     "2048",
     "--policy-hidden",
-    "2048",
     "1024",
     "512",
     "256",
@@ -89,15 +89,29 @@
     "cpu",
     "--replay-device",
     "cpu",
-    "--world-model-from",
-    "outputs/train/opensprite-umr-lafan3-warmstart-20261101/world-model-source.pt",
     "--wm-validation-envs",
     "24",
     "--wm-validation-every",
     "50",
     "--wm-validation-batch",
-    "1536"
+    "1536",
+    "--coverage-audit",
+    "--wm-loss-scale",
+    "1.0",
+    "--failure-replay-fraction",
+    "0.0",
+    "--disable-torque-lag"
   ],
-  "campaign_note": "Same NEW12h campaign authorized Nov1; prior=stopped paper-scale phase2244.9284985s, excludes original Oct31 campaign9508s. WM/cost heads+Adam warm start only; actor/critic/sampler fresh. Warmup500outerx4=2000additionalWMsteps, hand-review before joint; no fresh budget.",
-  "phase": "joint"
+  "phase": "cold_warmup_then_joint",
+  "campaign_note": "Single dance2_subject1, fresh networks and optimizers, eight-hour cumulative budget. Actor 1024/512/256, world model 2048x3, 768 environments; torque lag disabled and command delay retained.",
+  "delivery_dir": "outputs/delivery/opensprite_dance_no_torque_lag_20261101",
+  "evaluation_clips": [
+    0
+  ],
+  "evaluation_seeds": [
+    42,
+    43,
+    44
+  ],
+  "delivery_video_count": 0
 }

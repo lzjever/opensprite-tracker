@@ -1,0 +1,95 @@
+# 独立复现
+
+[返回主README](../README.md)
+
+当前数据为单条 `dance2_subject1`，225.66秒。以下命令在仓库根目录执行。代码、原始BVH、Geno、机器人、对应资产和示例产物都在仓库内；Python依赖仍需按requirements安装。
+
+## 环境
+
+Linux、Python3.12、CUDA12.8；训练使用支持CUDA的GPU。准备Git LFS、Node.js≥18、FFmpeg和EGL运行库。Ubuntu可安装 `git-lfs nodejs ffmpeg libegl1 libgl1`；发行版Node过旧时另装新版。
+
+```bash
+git lfs install --local
+git lfs pull
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements-lock.txt
+uv venv --python 3.12 .venv-umr
+uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
+.venv/bin/python scripts/demo.py check --profile all
+```
+
+两个环境分别用于训练/视频和原生UMR，NumPy、MuJoCo版本不同。Node解析器及所需Three.js文件已经包含，不需要外部项目或全局npm包。检查命令验证文件、依赖与CPU接口，不执行GPU仿真。
+
+## 原始动作到训练动作
+
+原始数据位于 `data/sources/lafan1-resolved/`，人体为 `assets/geno/Geno.fbx`，机器人为 `assets/opensprite/`，已有对应关系位于 `assets/umr_correspondence/geno_opensprite0825/`。
+
+复用已有对应关系，对完整原始BVH运行原生UMR优化并转换：
+
+```bash
+.venv/bin/python scripts/demo.py retarget --motions dance2_subject1
+.venv/bin/python scripts/demo.py build-motion
+```
+
+输出为 `outputs/rebuild-dance/native/dance2_subject1/native.npz`，单动作及打包库在 `outputs/rebuild-dance/motions/`。训练库为其中的 `lafan_dance.npz`。
+
+从表面采样、对应网络训练、原生优化到转换全部重建：
+
+```bash
+.venv/bin/python scripts/demo.py retarget --stage all --motions dance2_subject1 \
+  --correspondence-dir outputs/rebuild-dance/new-correspondence
+```
+
+对应训练默认CPU；需要使用GPU时显式增加 `--correspondence-device cuda`。原生轨迹优化使用CPU。完整重建耗时独立于tracker八小时预算。新训练对应关系存在随机性，不承诺与随仓库提供的结果逐位一致。
+
+分阶段可用 `--stage build`、`--stage train` 和 `--stage retarget`，三阶段保持相同的 `--correspondence-dir`、输出和cache参数。仅做解析/优化小检查可传 `--max-frames 3`，该产物不能当完整舞蹈训练库；正式转换要求完整源时间轴。
+
+## 训练
+
+使用随仓库的动作库，从零训练：
+
+```bash
+.venv/bin/python scripts/demo.py train --output outputs/my-dance --hours 8
+```
+
+使用自己重新retarget的动作库：
+
+```bash
+.venv/bin/python scripts/demo.py train --output outputs/my-retarget-dance --hours 8 \
+  --motion outputs/rebuild-dance/motions/lafan_dance.npz
+```
+
+命令按 `configs/demo/dance-8h.json` 生成独立 `demo-training.json`，由monitor维护累计预算和故障恢复。目录必须全新。八小时含设置、编译及预热，预留180秒停止保存。正常恢复不刷新时钟；monitor恢复同一run时可再次运行：
+
+```bash
+.venv/bin/python scripts/monitor_training.py \
+  --config outputs/my-dance/demo-training.json
+```
+
+恢复前确认该run的monitor和trainer均已退出。checkpoint恢复模型、优化器和统计；replay、RNG与仿真状态重建，不保证逐位续跑。`metrics.csv`、`supervisor.json`和checkpoint位于训练输出目录。
+
+## 评估和完整录像
+
+```bash
+.venv/bin/python scripts/demo.py evaluate --output outputs/my-evaluation
+.venv/bin/python scripts/demo.py record --output outputs/my-recording
+```
+
+评估默认30000轮快照、seed42、N3；录像默认18000轮快照、seed42、N1。可增加 `--checkpoint outputs/my-dance/model_XXXXXX.pt` 选择自己的模型。评估从第一帧请求全源，失败后仍以首次失败计分；录像在失败后继续真实控制至源结尾，并在HUD标注。示例首次失败193.76秒，完整225.66秒不代表完整成功。
+
+已有rollout无需重新执行策略或物理，直接生成视频：
+
+```bash
+MUJOCO_GL=egl .venv/bin/python -m opensprite_tracker.supermimic.render \
+  --rollout artifacts/recordings/dance-model018000/rollout.npz \
+  --model assets/opensprite/opensprite.xml \
+  --output outputs/my-rerender --env-index 0 \
+  --width 1920 --height 1080 --fps 50 \
+  --include-post-failure --failure-hold-seconds 0
+```
+
+显式指定仓库内模型可覆盖录像元数据中的机器路径。地面为格子，蓝色半透明机器人表示参考，HUD包含源时间、误差、力矩/速度和失败状态。视频帧覆盖0–225.66秒；50fps容器时长为225.68秒。
+
+## 已执行的独立性检查
+
+隔离副本已完成CPU模型加载、动作库/FK检查，以及只使用随仓库素材的Node人体解析和3帧原生UMR优化。单动作重新打包与提供的动作库逐字段一致。CLI命令完成dry-run及针对性CPU测试。未在全新机器上重新跑完对应训练、八小时tracker训练和完整GPU录像；硬件、驱动与随机性可能影响结果。

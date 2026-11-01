@@ -1,14 +1,13 @@
-# OpenSprite tracker
+# OpenSprite Demo Tracker
 
-- Develop one shared whole-body policy for the three selected OrangeDuck LAFAN motions. Keep each source trajectory and its time axis distinct. Do not concatenate references across motion boundaries.
-- The user explicitly requires strict OpenSprite adaptation of UMR. The production retarget path must use genuine learned human/robot surface correspondence and UMR optimization with newly generated OpenSprite samples/configuration. Task-space IK is a diagnostic baseline, never a substitute described as UMR. Do not reuse X2 correspondence slots, point clouds, poses, limits or physical assumptions.
-- This repository is standalone: all project source, robot assets, motion data and launch configuration must be repository-owned. `.reference/` is ignored research material only; no runtime imports, symlinks, editable dependencies or path fallbacks to sibling checkouts.
-- OpenSprite's official model defines its topology, joint axes, hard limits and inertials. X2 supplies algorithm implementations, never robot physical constants. Preserve upstream licenses.
-- Treat Sprite as a new robot throughout: all 31 joints and 32 link frames are explicit; both waist joints and all three head joints must participate. Use per-joint actuator state/context. The user's latest explicit instruction requires the same command delay and first-order torque lag model as X2, including its parameters and tick timing; implement it with OpenSprite's own joint mapping, gains and official effort limits. This overrides the earlier proposed zero-lag default. Validate real and imagined actuator timing consistently.
-- Retain legitimate lying, falling and getting-up poses. Do not introduce an upright termination or blanket body-ground prohibition.
-- Keep raw sources unchanged. Record retargeting coordinate conventions, resampling and solver/postprocessing choices. Compute FK and velocities per trajectory before combining the motion library.
-- Use a single policy with continuous windows inside one motion during training; evaluate each complete source from its first frame without resets or reference wrapping. Distinguish a short diagnostic from complete-motion success.
-- Formal runs use committed, fixed source snapshots, named output directories, checkpoints and resumable commands. This repo has no remote configured initially; local commits suffice unless a remote is supplied.
-- The user explicitly granted a NEW 12-hour GPU training budget on 2026-11-01 for restarting at the official SuperMimic paper scale. Keep the stopped earlier campaign and its time separately; all setup/compile/pilots/recovery for this new campaign share its 43200-second cap. Ordinary resumes never refresh it. Review at least hourly, retain checkpoints before corrections, and do not affect unrelated local processes.
-- Record substantive decisions and cross-review findings in `docs/plan/`. Keep focused checks for topology, motion boundaries, environment stepping, gradients and resume behavior.
-
+- 当前训练仅含 `dance2_subject1`：50Hz，11284状态、11283转移、225.66秒。使用仓库内 `data/motions/lafan_dance.npz`。
+- 本仓库必须独立运行。代码、机器人、原始动作、人体资产、表面对应和配置由仓库提供。`.reference/` 和 `outputs/` 不参与发布，不作为运行依赖。
+- UMR使用OpenSprite自己的31关节、32 link、表面采样、对应关系和约束。以官方机器人轴、惯量、限位和effort为准，保留第三方许可。
+- 当前配方：actor编码器/解码器各1024/512/256、latent32；WM2048×3；critic256/128；768env；WM4×1024/K8、actor512/H32、critic5×4。先500个outer仅训练WM和成本head，再联合训练。
+- 一阶力矩迟滞关闭，命令延迟保留0/1个5ms tick、hold .9、每4tick刷新。控制50Hz，物理200Hz。评估读取checkpoint中的执行器模式。
+- 当前运行目录为 `outputs/train/opensprite-dance-no-torque-lag-cold-8h-20261101`。八小时累计预算hard28800秒、soft28620秒，包含编译、预热和恢复；普通resume不刷新。固定训练分支不可移动。
+- 训练保持当前物理、数据、奖励及判定。合理身体触地应被保留。模型和短窗误差有限不等于完整舞蹈成功。
+- 每小时审查沿用CLI后台runner及 `docs/plan/hourly-audit-dance-8h-task.md`，不创建系统服务、timer或cron，不启动第二个trainer。明确故障先保留现场，再在原预算内恢复。
+- 完整评估从源首帧开始，不重置、不循环参考。录像允许失败后继续真实策略和物理，保留首次失败和未评分标记。
+- 用户授权向公开仓库提交本demo代码、所选原始动作、资产、快照和视频。发布说明仅描述当前单舞蹈配方，不披露内部参考项目和历史实验。保留必要版权和许可证。
+- 文档简练、用陈述句；中文主README链接英文版。发布前检查文件完整性、相对路径、LFS和独立复现入口。不要更改运行中的训练配置来满足文档。

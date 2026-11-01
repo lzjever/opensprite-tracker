@@ -1,4 +1,4 @@
-"""Flat X2 simulator adapter with explicit frame ownership and terminal snapshots.
+"""Flat-world OpenSprite adapter with explicit frames and terminal snapshots.
 
 simulate() never calls ManagerBasedRlEnv.step/reset or MotionCommand.compute.
 step() labels a cloned physical transition BEFORE optional reset. Simulator
@@ -39,19 +39,22 @@ class OpenSpriteTrackingEnv:
         gamma=0.99,
         full_body_collision=False,
         eval_clip=0,
+        torque_lag_enabled=True,
     ):
         from mjlab.envs import ManagerBasedRlEnv
 
         self.device, self.N, self.num_envs = str(device), num_envs, num_envs
         self.motion, self.mdp, self.gamma = motion, mdp, gamma
         self.full_body_collision, self.eval_clip = full_body_collision, eval_clip
+        self.torque_lag_enabled = bool(torque_lag_enabled)
         self.reward_head = mdp.reward if mdp is not None else None
         self.eval_mode, self.reset_noise = eval_mode, reset_noise and not eval_mode
         self.auto_reset = not eval_mode if auto_reset is None else auto_reset
         self.max_episode_steps = max_episode_steps if not eval_mode else 10**9
         self.raw_env = ManagerBasedRlEnv(
             make_env_cfg(
-                num_envs, seed, randomize, full_body_collision=full_body_collision
+                num_envs, seed, randomize, full_body_collision=full_body_collision,
+                torque_lag_enabled=self.torque_lag_enabled,
             ),
             device=self.device,
         )
@@ -61,7 +64,7 @@ class OpenSpriteTrackingEnv:
         self.joint_ids = self.robot.find_joints(JOINT_NAMES, preserve_order=True)[0]
         self.actuator = self.robot.actuators[0]
         if len(self.robot.actuators) != 1:
-            raise ValueError("Expected the baseline's single grouped X2 actuator")
+            raise ValueError("Expected a single whole-body OpenSprite actuator")
         names = [n.rsplit("/", 1)[-1] for n in self.actuator.target_names]
         self.act_ids = [names.index(n) for n in JOINT_NAMES]
         action_names = [
@@ -84,7 +87,9 @@ class OpenSpriteTrackingEnv:
         )
         self.default_q = self.robot.data.default_joint_pos[0, self.joint_ids].clone()
         self.alpha = torch.full((31,), ACTION_SCALE, device=self.device)
-        self.context_offset, self.context_scale = context_normalization(self.device)
+        self.context_offset, self.context_scale = context_normalization(
+            self.device, torque_lag_enabled=self.torque_lag_enabled
+        )
         self.f = torch.zeros(num_envs, dtype=torch.long, device=self.device)
         self.ep_step = torch.zeros_like(self.f)
         self.a_prev = torch.zeros(num_envs, 31, device=self.device)

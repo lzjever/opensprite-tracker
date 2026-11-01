@@ -4,21 +4,21 @@ import json
 from pathlib import Path
 import numpy as np
 from retarget.processing import robot_contract,refine_angles,kinematics,geometry_quality,correct_small_ground_residual
-from retarget.yy.motion_postprocess import process_motion
-from retarget.yy.bvh_adapters import inspect_bvh
+from retarget.bvh_tools.motion_postprocess import process_motion
+from retarget.bvh_tools.bvh_adapters import inspect_bvh
 from retarget.umr_pipeline import ROOT,MOTIONS,validate_slots
 
 METHOD='umr_native_nr_surface_vector_v1'
 REVISION='opensprite-umr-geno-v1-20261031'
 
 
-def guard_metadata():
-    path=validate_slots()
+def guard_metadata(correspondence_dir=None):
+    path=validate_slots(correspondence_dir)
     with np.load(path,allow_pickle=True) as slots:names=np.asarray(slots['names']).astype(str)
     return dict(retarget_method=np.asarray(METHOD),robot_model=np.asarray('opensprite0825'),dataset_revision=np.asarray(REVISION),correspondence_names=names)
 
 
-def convert(source,name,output,allow_partial=False):
+def convert(source,name,output,allow_partial=False,*,correspondence_dir=None):
     model,joints,limits,velocity=robot_contract()
     source_info=inspect_bvh(ROOT/'data/sources/lafan1-resolved'/f'{name}.bvh')
     with np.load(source,allow_pickle=True) as data:
@@ -43,7 +43,7 @@ def convert(source,name,output,allow_partial=False):
     quality=geometry_quality(model,qpos,50.)
     if quality['minimum_collision_z_m']<0:raise ValueError('Final float32 ground geometry failed')
     payload=kinematics(model,qpos)
-    metadata=guard_metadata()
+    metadata=guard_metadata(correspondence_dir)
     payload.update(metadata,qpos=qpos,time=times,fps=np.asarray(50.),joint_names=np.array(joints),body_names=np.array([model.body(i).name for i in range(1,model.nbody)]),source_name=np.asarray(name),source_fps=np.asarray(source_info['fps']),source_frames=np.asarray(len(frame_ids)),coordinate_system=np.asarray('mujoco_z_up_wxyz'),motion_quality=np.asarray('needs_review'))
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     np.savez_compressed(output,**payload)
@@ -53,11 +53,13 @@ def convert(source,name,output,allow_partial=False):
     return output
 
 
-def merge(paths,output):
+def pack(paths,output,*,correspondence_dir=None):
     clips=[]
     for path in paths:
         with np.load(path,allow_pickle=False) as data:clips.append({k:data[k] for k in data.files})
-    if [str(c['source_name']) for c in clips]!=list(MOTIONS):raise ValueError('Production bank requires exactly the three selected sources in canonical order')
+    names=[str(c['source_name']) for c in clips]
+    if not names or len(set(names))!=len(names) or any(not name for name in names):
+        raise ValueError('Packed library requires distinct named complete source motions')
     for clip in clips:
         if str(clip['retarget_method'])!=METHOD:raise ValueError('Prototype or other retarget method cannot enter production bank')
         for key in ('joint_names','body_names','correspondence_names'):
@@ -65,17 +67,25 @@ def merge(paths,output):
     fields=('joint_pos','joint_vel','body_pos_w','body_quat_w','body_lin_vel_w','body_ang_vel_w')
     result={k:np.concatenate([c[k] for c in clips],axis=0) for k in fields}
     lengths=np.array([len(c['joint_pos']) for c in clips],np.int64)
-    result.update(guard_metadata(),fps=np.asarray(50.),motion_names=np.array(MOTIONS),motion_starts=np.r_[0,np.cumsum(lengths)[:-1]],motion_lengths=lengths,joint_names=clips[0]['joint_names'],body_names=clips[0]['body_names'],motion_categories=np.array(['lafan/dance','lafan/getup','lafan/walk']),motion_qualities=np.array([str(c['motion_quality']) for c in clips]))
+    categories={'dance2_subject1':'lafan/dance'}
+    # Keep the released metadata storage widths stable, without truncating new names.
+    name_dtype=f'U{max(22,max(map(len,names)))}'
+    result.update(guard_metadata(correspondence_dir),fps=np.asarray(50.),motion_names=np.array(names,dtype=name_dtype),motion_starts=np.r_[0,np.cumsum(lengths)[:-1]],motion_lengths=lengths,joint_names=clips[0]['joint_names'],body_names=clips[0]['body_names'],motion_categories=np.array([categories.get(name,'motion') for name in names],dtype='U11'),motion_qualities=np.array([str(c['motion_quality']) for c in clips]))
+    output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     np.savez_compressed(output,**result)
-    print(json.dumps({'output':str(output),'names':list(MOTIONS),'lengths':lengths.tolist(),'starts':result['motion_starts'].tolist(),'retarget_method':METHOD}),flush=True)
+    print(json.dumps({'output':str(output),'names':names,'lengths':lengths.tolist(),'starts':result['motion_starts'].tolist(),'retarget_method':METHOD}),flush=True)
+
+
+def merge(paths,output):
+    return pack(paths,output)
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--input-dir',type=Path,default=ROOT/'outputs/umr/full')
-    parser.add_argument('--output-dir',type=Path,default=ROOT/'data/motions')
+    parser.add_argument('--input-dir',type=Path,default=ROOT/'outputs/umr/rebuild')
+    parser.add_argument('--output-dir',type=Path,default=ROOT/'outputs/umr/rebuild/motions')
     args=parser.parse_args()
     paths=[convert(args.input_dir/name/'native.npz',name,args.output_dir/f'{name}.npz') for name in MOTIONS]
-    merge(paths,args.output_dir/'lafan_three.npz')
+    merge(paths,args.output_dir/'lafan_dance.npz')
 
 if __name__=='__main__':main()

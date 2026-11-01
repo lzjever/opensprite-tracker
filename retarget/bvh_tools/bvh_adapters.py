@@ -1,8 +1,4 @@
-"""Select BVH conventions and adapt only supported SOMA-bound sources.
-
-LaFAN1 is detected here so callers can route it to the required SMPL-X
-adapter.  It must never be projected onto the SOMA skeleton.
-"""
+"""BVH channel parsing, transforms, and repository-owned Geno skeleton validation."""
 import re
 import shutil
 from functools import lru_cache

@@ -1,0 +1,12 @@
+{
+  "name": "opensprite-umr-node-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline Geno FBX export using the checked-in Three.js 0.165.0 parser subset; no npm runtime downloads",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "check": "node --no-warnings --experimental-loader ./nr_three_loader.mjs --input-type=module -e \"import('three').then(m => console.log('Vendored Three.js revision ' + m.REVISION))\""
+  },
+  "dependencies": {}
+}

@@ -1,7 +1,7 @@
 """Fresh-simulation, open-loop 1/8-step OpenSprite world-model diagnostic (no training).
 
 Example:
-  python -m supermimic_x2.validate_model --checkpoint RUN/model_001000.pt \
+  python -m opensprite_tracker.supermimic.validate_model --checkpoint RUN/model_001000.pt \
       --output outputs/supermimic/model-check-1000
 
 Default budget: 64 independent environments, four random-reference resets,
@@ -30,7 +30,7 @@ import torch
 from . import networks
 from .networks import Policy, WorldModel
 from .robot import CONTEXT_DIM, MEM_DIM
-from .evaluate import clip_bounds, resolve_motion_files
+from .evaluate import clip_bounds, resolve_motion_files, checkpoint_torque_lag_enabled
 from .rotations import rot_angle_sq
 
 HORIZON = 8
@@ -45,7 +45,7 @@ def load_models(path, device, motion_override=None):
     cfg = dict(ck["args"] if isinstance(ck["args"], dict) else vars(ck["args"]))
     from .robot import physical_contract
 
-    if ck.get("robot_contract") != physical_contract():
+    if ck.get("robot_contract") != physical_contract(torque_lag_enabled=checkpoint_torque_lag_enabled(ck)):
         raise ValueError("Checkpoint physical robot contract changed")
     from opensprite_tracker.motion_contract import validate_motion_contract
     from .evaluate import resolve_motion_files
@@ -210,6 +210,7 @@ def validate(args):
         randomize=True,
         auto_reset=True,
         gamma=float(cfg.get("gamma", 0.99)),
+        torque_lag_enabled=not bool(cfg.get("disable_torque_lag", False)),
         full_body_collision=full_body_collision,
     )
     sampler = ReturnSampler(motion)
@@ -237,7 +238,7 @@ def validate(args):
             )
             prediction = env.state()  # the ONLY real-state input to this WM segment
             context = env.normalize_xi(env.xi)
-            history = torch.zeros(args.num_envs, pi.hist, 99, device=args.device)
+            history = torch.zeros(args.num_envs, pi.hist, pi.obs_dim, device=args.device)
             alive = torch.ones(args.num_envs, dtype=torch.bool, device=args.device)
             segment_counts = {}
             for step in range(1, HORIZON + 1):
@@ -280,6 +281,7 @@ def validate(args):
             "clip_end": motion.clip_end.cpu().tolist(),
             "clip": selected_clip,
             "full_body_collision": full_body_collision,
+            "torque_lag_enabled": not bool(cfg.get("disable_torque_lag", False)),
             "seed": args.seed,
             "training_seed": cfg.get("seed"),
             "num_envs": args.num_envs,

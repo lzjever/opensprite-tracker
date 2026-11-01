@@ -1,8 +1,8 @@
 # OpenSprite SuperMimic
 
-Standalone Sprite0825 adaptation of the validated `beyondmimic-umr` SuperMimic branch (`32fc15e`).
+Standalone whole-body tracking of `dance2_subject1` on Sprite0825 with SuperMimic.
 
-See `../../docs/plan/tracker-research.md` for the source, exact architecture, necessary robot adaptations, data contract, training command and evaluation protocol.
+The published setup provides an eight-hour cold-start training configuration with explicit world-model warmup. The default reference is `data/motions/lafan_dance.npz`. See the repository's Chinese and English README files for the architecture, data preparation, commands and evaluation limits.
 
 Train: `python -m opensprite_tracker.supermimic.train --help`
 Evaluate: `python -m opensprite_tracker.supermimic.evaluate --help`

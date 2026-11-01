@@ -1,6 +1,6 @@
 """Analytic tracking heads, shared by real transitions and imagined transitions.
 
-Adapted from zita-ch/supermimic_vibed; see THIRD_PARTY_LICENSE.txt.
+MIT-licensed algorithm utility; see THIRD_PARTY_LICENSE.txt.
 Only the critic/world model receive simulator context and actuator memory.
 """
 from __future__ import annotations

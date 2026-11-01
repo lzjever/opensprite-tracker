@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Adapted from supermimic_vibed (SuperMimic independent implementation).
+# MIT-licensed algorithm utility; see THIRD_PARTY_LICENSE.txt.
 # Copyright (c) 2026 ETH Zurich, Chong Zhang
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy

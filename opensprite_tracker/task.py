@@ -1,6 +1,6 @@
 """Sprite0825 physical entity and user-requested temporal actuator model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import mujoco
 import mujoco_warp as mjwarp
 import torch
@@ -32,6 +32,7 @@ DECIMATION = 4
 @dataclass(kw_only=True)
 class FilteredIdealPdActuatorCfg(IdealPdActuatorCfg):
     torque_time_constant_range: tuple[float, float] = TORQUE_TIME_CONSTANT_RANGE_S
+    torque_lag_enabled: bool = True
 
     def build(self, entity, target_ids, target_names):
         return FilteredIdealPdActuator(self, entity, target_ids, target_names)
@@ -89,11 +90,13 @@ class FilteredIdealPdActuator(IdealPdActuator[FilteredIdealPdActuatorCfg]):
         self.default_stiffness = self.stiffness.clone()
         self.default_damping = self.damping.clone()
         self.default_force_limit = self.force_limit.clone()
-        low, high = self.cfg.torque_time_constant_range
+        low, high = self.cfg.torque_time_constant_range if self.cfg.torque_lag_enabled else (0.0, 0.0)
         if not 0.0 <= low <= high:
             raise ValueError("torque time constants must satisfy 0 <= low <= high")
-        per_group = low + (high - low) * torch.rand(
-            (num_envs, len(TORQUE_LAG_GROUPS)), device=device
+        per_group = (
+            low + (high - low) * torch.rand((num_envs, len(TORQUE_LAG_GROUPS)), device=device)
+            if self.cfg.torque_lag_enabled
+            else torch.zeros((num_envs, len(TORQUE_LAG_GROUPS)), device=device)
         )
         self.extended_env_mask = torch.zeros(num_envs, dtype=torch.bool, device=device)
         group_gain = torch.ones_like(per_group)
@@ -132,7 +135,9 @@ class FilteredIdealPdActuator(IdealPdActuator[FilteredIdealPdActuatorCfg]):
             torch.where(initialize[:, None], requested, self.filtered_effort)
         )
         self.filter_initialized.fill_(True)
-        provisional = torch.where(
+        # Command delay is processed upstream and remains enabled. In zero-lag
+        # mode memory stores the latest applied PD effort with the same layout.
+        provisional = requested if not self.cfg.torque_lag_enabled else torch.where(
             self.filter_alpha == 1,
             requested,
             self.filtered_effort
@@ -170,7 +175,11 @@ def get_spec():
     return mujoco.MjSpec.from_file(str(ROBOT_XML))
 
 
-def robot_cfg():
+def robot_cfg(*, torque_lag_enabled=True):
+    actuators = ACTUATORS if torque_lag_enabled else tuple(
+        replace(actuator, torque_lag_enabled=False, torque_time_constant_range=(0.0, 0.0))
+        for actuator in ACTUATORS
+    )
     return EntityCfg(
         init_state=EntityCfg.InitialStateCfg(
             pos=(0.0, 0.0, INITIAL_ROOT_HEIGHT),
@@ -179,7 +188,7 @@ def robot_cfg():
         ),
         spec_fn=get_spec,
         articulation=EntityArticulationInfoCfg(
-            actuators=ACTUATORS, soft_joint_pos_limit_factor=0.9
+            actuators=actuators, soft_joint_pos_limit_factor=0.9
         ),
         sort_actuators=True,
         collisions=(

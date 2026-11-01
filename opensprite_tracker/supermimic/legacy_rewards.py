@@ -1,28 +1,26 @@
-"""Flat-world migration of the *21* rewards in YY-v3 PPO39999 params/env.yaml.
+"""Whole-body tracking rewards for the single-dance OpenSprite task.
 
-Sources: agibot_x2/{support_balance,microterrain,substep_speed_relax,
-ankle_balance,limb_tracking}_task.py and mjlab.tasks.tracking.mdp.rewards.
+Tracking, support, command effort and contact costs use OpenSprite kinematics,
+per-joint limits and recorded simulator transition measurements.
 No pose classes, frame windows, upright target, or fixed root-height target.
 
-Deliberate differences from the old manager pipeline:
+Conventions:
 * All targets use the supplied arrived-at frame and current torso anchor, not
-  cached pre-step alignment / one-substep-stale body kinematics.
+  cached pre-step alignment or stale body kinematics.
 * Immutable-reference non-foot collision-geometry clearance, provided by
   kin.reference_nonfoot_clearance and cached once, fades every support
   preference out over 2--5 cm. The reward does not prescribe an AABB or an
   exact primitive/mesh support query. Proximity indicates support ambiguity,
-  NOT measured contact or load. The old flat/toe gate alone cannot justify
-  foot loading in arbitrary poses.
+  NOT measured contact or load.
 * Both reference sole normals must also face the ground's upward normal:
   confidence ramps from zero at normal Z <= 0 to one at Z >= .5. This only
   qualifies support preferences; foot orientation targets remain the reference,
   including inverted poses. It is not an upright posture reward.
-* Flat foot stability retains the old flat branch (XY velocity, no contact
-  bonus/gate). It scores kinematic agreement, not proof of actual contact.
-* Impact ramp is explicit, not inferred from PPO's 24-step rollout length.
+* Flat foot stability scores XY velocity without a contact bonus or gate.
+  It scores kinematic agreement, not proof of actual contact.
+* Impact ramp is an explicit training-progress parameter.
 * References retain MotionLib's FK-consistent body velocities. Sprite uses its
   own full-body primitives, official box soles and nonlocal self contacts.
-  No rough-terrain branch is silently emulated.
 
 Transition metrics MUST be supplied (measured or supervised predictions), in
 BODY_JOINT_NAMES order: speed_peak includes the final boundary; torque peaks

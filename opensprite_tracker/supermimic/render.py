@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
 """Offline official-mesh comparison of a recorded REAL OpenSprite rollout.
 
-Visual conventions follow the local BeyondMimic comparison recorders; no code,
-robot model, policy or physics is imported from another checkout. Both poses
-retain their recorded world coordinates. No physics steps or resets are run.
+Render the simulated robot and reference ghost in their recorded world
+coordinates using the repository's OpenSprite meshes. Rendering advances no
+physics and performs no resets.
 
 python -m opensprite_tracker.supermimic.render --rollout EVAL/rollout.npz --output VIDEO
 python -m opensprite_tracker.supermimic.render --rollout EVAL/rollout.npz \
@@ -31,6 +31,88 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def continuation_mode(metadata, requested=None):
+    enabled = metadata.get("continue_after_failure", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("continue_after_failure metadata must be boolean")
+    if requested is not None and bool(requested) != enabled:
+        raise ValueError("Post-failure render assertion must match the actual recording metadata")
+    if enabled:
+        if metadata.get("post_failure_policy", "continue_actor") != "continue_actor":
+            raise ValueError("Continued recording must use the real actor after failure")
+        if metadata.get("no_reset") is False or metadata.get("no_reference_wrapping") is False:
+            raise ValueError("Continued recording must not reset or wrap the reference")
+    return enabled
+
+
+def recording_frame_plan(arrays, metadata, *, env, source_fps, video_fps,
+                         start_seconds=0., end_seconds=None, preview_frame=None,
+                         max_render_frames=None, failure_hold_seconds=1.5,
+                         include_post_failure=None):
+    """Pure frame selection, preserving genuine continued states after failure."""
+    if not (math.isfinite(source_fps) and math.isfinite(video_fps)
+            and source_fps > 0 and video_fps > 0):
+        raise ValueError("Source and video FPS must be positive")
+    if failure_hold_seconds < 0 or not math.isfinite(failure_hold_seconds):
+        raise ValueError("failure-hold-seconds must be finite and nonnegative")
+    count = len(arrays["root_pos"])
+    if count < 1 or not 0 <= env < arrays["root_pos"].shape[1] or len(arrays["live"]) != count:
+        raise ValueError("Invalid recorded state/live dimensions or env-index")
+    continuing = continuation_mode(metadata, include_post_failure)
+    failed = np.flatnonzero(~arrays["live"][:, env])
+    first_failure = int(failed[0]) if len(failed) else None
+    recorded_end = count-1 if continuing or first_failure is None else first_failure
+    if continuing:
+        if np.any(arrays["live"][1:, env] & ~arrays["live"][:-1, env]):
+            raise ValueError("First-failure live mask must remain sticky without a reset")
+        if metadata.get("executed_transitions", count-1) != count-1:
+            raise ValueError("Continued metadata and recorded state count disagree")
+        if "ref_frame" in arrays and np.any(np.diff(arrays["ref_frame"][:, env]) != 1):
+            raise ValueError("Continued reference must advance once per state without freezing or wrapping")
+        if metadata.get("complete_clip") and count-1 != metadata.get("expected_transitions", count-1):
+            raise ValueError("Complete-source metadata cannot describe a shortened continued recording")
+    start = max(0, int(math.ceil(start_seconds * source_fps)))
+    end = recorded_end + 1
+    if end_seconds is not None:
+        end = min(end, int(math.floor(end_seconds * source_fps)) + 1)
+    if start >= end:
+        raise ValueError("empty recording interval, possibly after physical failure")
+    if preview_frame is not None:
+        if not start <= preview_frame < end:
+            raise ValueError("preview-frame is outside the recorded interval")
+        indices = [preview_frame]
+    else:
+        output_count = max(1, int(math.floor((end-1-start)/source_fps*video_fps))+1)
+        indices = np.minimum(end-1, np.rint(start + np.arange(output_count)*source_fps/video_fps).astype(int)).tolist()
+        if max_render_frames is not None:
+            if max_render_frames < 1:
+                raise ValueError("max-render-frames must be positive")
+            indices = indices[:max_render_frames]
+    hold = (max(0, round(failure_hold_seconds*video_fps))
+            if not continuing and preview_frame is None and first_failure is not None
+            and indices[-1] == recorded_end else 0)
+    return {"indices": indices, "interval": (start, end), "recorded_end": recorded_end,
+            "first_failure": first_failure, "continue_after_failure": continuing,
+            "hold_frames": hold,
+            "full_recorded_span_rendered": preview_frame is None and indices[0] == 0 and indices[-1] == count-1,
+            "full_source_recorded": bool(metadata.get("complete_clip")
+                and count-1 == metadata.get("expected_transitions")
+                and metadata.get("requested_transitions") == metadata.get("expected_transitions"))}
+
+
+def failure_annotation(live, continuing, first_failure_seconds, *, held=False):
+    if live:
+        return "LIVE", None
+    if continuing:
+        first = f"{first_failure_seconds:.2f}s" if first_failure_seconds is not None else "unavailable"
+        return "POST-FAILURE CONTINUING", f"首次失败 {first} · 失败后持续仿真不重置 / POST-FAILURE CONTINUING"
+    return "FAILED", ("真实终止 · 视频停帧回看 · 未继续仿真" if held else "真实终止 · 记录在此截断")
+
+
+def policy_label(metadata):
+    return "单动作策略" if metadata.get("training_clip_count") == 1 else "策略"
 
 
 def build_models(path, width, height):
@@ -147,12 +229,18 @@ class Hud:
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         ] if Path(p).is_file()), None)
         self.fonts = {}
-        names = {"dance2_subject1": "舞蹈", "fallAndGetUp3_subject1": "倒地起身", "walk4_subject1": "步行"}
+        names = {"dance2_subject1": "舞蹈"}
         clip = metadata.get("clip_name", f"clip {metadata.get('clip', '?')}")
         self.title = args.title or f"{names.get(clip, '动作追踪')}  /  {clip}"
         self.source_seconds = metadata.get("expected_transitions", 0) / fps
         self.request_seconds = metadata.get("requested_transitions", len(arrays["root_pos"]) - 1) / fps
         self.actual_seconds = recorded_end / fps
+        self.continuing = continuation_mode(metadata)
+        failed = np.flatnonzero(~arrays["live"][:, args.env_index])
+        self.first_failure_seconds = (
+            (int(arrays["ref_frame"][failed[0], args.env_index])-int(metadata.get("ref_start", 0)))/fps
+            if len(failed) else None
+        )
 
     def font(self, size):
         size = max(10, round(size * self.scale))
@@ -184,24 +272,23 @@ class Hud:
         text((58, 41), "OPENSPRITE  /  SUPERMIMIC", 17, cyan)
         text((58, 68), self.title, 31, white)
         iteration = self.m.get("iteration", "unavailable")
-        details = f"共享策略 · checkpoint {iteration}    |    seed {self.m.get('seed', '?')} · env {env}    |    {self.args.fps:g} FPS · {self.w}×{self.h}"
+        details = f"{policy_label(self.m)} · checkpoint {iteration}    |    seed {self.m.get('seed', '?')} · env {env}    |    {self.args.fps:g} FPS · {self.w}×{self.h}"
         text((58, 114), details, 19, muted)
         frame = int(self.a["ref_frame"][t, env]) - int(self.m.get("ref_start", 0))
         seconds = frame / self.fps
         live = bool(self.a["live"][t, env])
-        status = "LIVE" if live else "FAILED"
+        status, failure_message = failure_annotation(live, self.continuing, self.first_failure_seconds, held=held)
         status_colour = (113, 228, 181, 255) if live else (255, 132, 125, 255)
-        x = self.w - 225*s
+        x = self.w - (535 if not live and self.continuing else 225)*s
         draw.rounded_rectangle((x, 58*s, self.w-59*s, 110*s), radius=13*s, fill=(*status_colour[:3], 30))
         draw.ellipse((x+16*s, 78*s, x+26*s, 88*s), fill=status_colour)
-        draw.text((x+39*s, 67*s), status, font=self.font(23), fill=status_colour)
-        if not live:
-            message = "真实终止 · 视频停帧回看 · 未继续仿真" if held else "真实终止 · 记录在此截断"
-            length = draw.textlength(message, font=self.font(21))
+        draw.text((x+39*s, 67*s), status, font=self.font(20 if self.continuing else 23), fill=status_colour)
+        if failure_message:
+            length = draw.textlength(failure_message, font=self.font(21))
             left = (self.w-length)/2
             draw.rounded_rectangle((left-20*s, 187*s, left+length+20*s, 233*s),
                                    radius=12*s, fill=(74, 26, 31, 224))
-            draw.text((left, 191*s), message, font=self.font(21), fill=status_colour)
+            draw.text((left, 191*s), failure_message, font=self.font(21), fill=status_colour)
         drift = float(np.linalg.norm(self.a["root_pos"][t, env] - self.a["ref_root_pos"][t]))
         joint = self.metric("metric_joint_error_rad", t, env)
         torque = self.metric("metric_applied_torque_ratio", t, env)
@@ -222,6 +309,8 @@ class Hud:
             if i > 0:
                 draw.line((cx-20*s, self.h-157*s, cx-20*s, self.h-86*s), fill=(120,150,185,55), width=1)
         note = "初始状态：尚无转移测量" if t == 0 else "力矩与速度：刚结束的 20 ms 控制周期内实测峰值"
+        if not live and self.continuing:
+            note = "真实持续仿真 · 标准评分含首次失败转移，其后仅作诊断（20 ms实测峰值）"
         draw.text((58*s, self.h-79*s), note, font=self.font(15), fill=muted)
         scope = ("完整源请求" if self.m.get("requested_transitions") == self.m.get("expected_transitions")
                  else f"请求前缀 {self.request_seconds:.2f}s")
@@ -256,27 +345,11 @@ def render(args):
     fps = float(arrays["fps"])
     if min(args.width, args.height, args.fps) <= 0 or args.camera_distance <= 0 or args.failure_hold_seconds < 0:
         raise ValueError("resolution, FPS and camera-distance must be positive")
-    failed = np.flatnonzero(~arrays["live"][:, env])
-    recorded_end = int(failed[0]) if len(failed) else len(arrays["root_pos"]) - 1
-    # Include the actual failure arrival frame, never show post-failure motion.
-    start = max(0, int(math.ceil(args.start_seconds * fps)))
-    end = min(len(arrays["root_pos"]), recorded_end + 1)
-    if args.end_seconds is not None:
-        end = min(end, int(math.floor(args.end_seconds * fps)) + 1)
-    if start >= end:
-        raise ValueError("empty recording interval, possibly after physical failure")
-    interval = (start, end)
-    if args.preview_frame is not None:
-        if not start <= args.preview_frame < end:
-            raise ValueError("preview-frame is outside recorded live/failure interval")
-        indices = [args.preview_frame]
-    else:
-        count = max(1, int(math.floor((end - 1 - start) / fps * args.fps)) + 1)
-        indices = np.minimum(end - 1, np.rint(start + np.arange(count) * fps / args.fps).astype(int)).tolist()
-        if args.max_render_frames is not None:
-            if args.max_render_frames < 1:
-                raise ValueError("max-render-frames must be positive")
-            indices = indices[:args.max_render_frames]
+    plan = recording_frame_plan(arrays, metadata, env=env, source_fps=fps, video_fps=args.fps,
+        start_seconds=args.start_seconds, end_seconds=args.end_seconds, preview_frame=args.preview_frame,
+        max_render_frames=args.max_render_frames, failure_hold_seconds=args.failure_hold_seconds,
+        include_post_failure=getattr(args, "include_post_failure", None))
+    recorded_end, interval, indices = plan["recorded_end"], plan["interval"], plan["indices"]
     fallback = ROOT / "assets/opensprite/opensprite.xml"
     recorded_model = Path(metadata.get("model_path", ""))
     model_path = Path(args.model or (recorded_model if recorded_model.is_file() else fallback)).resolve(strict=True)
@@ -317,8 +390,8 @@ def render(args):
                     writer.append_data(image)
                 if (n+1) % 250 == 0 or n+1 == len(indices):
                     print(f"RENDER {n+1}/{len(indices)} state={t}", flush=True)
-            if writer is not None and len(failed) and indices[-1] == recorded_end:
-                hold_frames = max(0, round(args.failure_hold_seconds * args.fps))
+            if writer is not None and plan["hold_frames"]:
+                hold_frames = plan["hold_frames"]
                 # Repeat only the last already-recorded pose. Time/metrics stay
                 # frozen and the added banner discloses the video-only hold.
                 held_image = hud.draw(renderer.render(), indices[-1], env, held=True)
@@ -333,8 +406,15 @@ def render(args):
             "recorded_pose_frames": len(indices), "failure_hold_frames": hold_frames,
             "failure_hold_seconds": hold_frames / args.fps,
             "video": str(video) if video else None, "preview": str(output / "preview.png"),
-            "preview_only": args.preview_frame is not None, "failure_state_index": int(failed[0]) if len(failed) else None,
-            "physical_failure_truncation": True, "camera_start": camera_start, "camera_end": camera_end,
+            "preview_only": args.preview_frame is not None, "failure_state_index": plan["first_failure"],
+            "first_failure_seconds": hud.first_failure_seconds,
+            "continue_after_failure": plan["continue_after_failure"],
+            "post_failure_policy": metadata.get("post_failure_policy"),
+            "post_failure_frames_rendered": sum(t > plan["first_failure"] for t in indices) if plan["first_failure"] is not None else 0,
+            "full_recorded_span_rendered": plan["full_recorded_span_rendered"],
+            "full_source_recorded": plan["full_source_recorded"],
+            "source_success_rate": metadata.get("success_rate"),
+            "physical_failure_truncation": not plan["continue_after_failure"], "camera_start": camera_start, "camera_end": camera_end,
             "rendering": "offline CPU MuJoCo FK + EGL, no policy or physics stepping",
             "quality": {"msaa_samples": int(model.vis.quality.offsamples), "shadow_size": int(model.vis.quality.shadowsize), "codec": "H264 CRF18"},
             "ghost": "identical official meshes, blue alpha.22, recorded world positions, no realignment",
@@ -364,8 +444,10 @@ def main():
     p.add_argument("--title", help="optional HUD title")
     p.add_argument("--preview-frame", type=int, help="render only this absolute recorded state index to preview.png")
     p.add_argument("--max-render-frames", type=int, help="limit frames for visual QA, never implies a full evaluation")
+    p.add_argument("--include-post-failure", action=argparse.BooleanOptionalAction, default=None,
+                   help="optional consistency assertion; actual continued recordings are detected automatically")
     p.add_argument("--failure-hold-seconds", type=float, default=1.5,
-                   help="video-only freeze on the final real failure frame, visibly disclosed")
+                   help="legacy video-only failure hold; automatically disabled for continued recordings")
     render(p.parse_args())
 
 

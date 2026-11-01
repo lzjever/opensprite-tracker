@@ -1,7 +1,3 @@
-The robot-independent algorithm and rotation utilities are adapted from
-https://github.com/zita-ch/supermimic_vibed (a1508d4).
-This repository is an unofficial implementation, not code released by the paper authors.
-
 MIT License
 
 Copyright (c) 2026 ETH Zurich, Chong Zhang

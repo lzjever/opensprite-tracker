@@ -1,87 +1,129 @@
-# OpenSprite 三动作统一 Tracker
+# OpenSprite Demo Tracker
 
-一个共享的 SuperMimic actor、critic 和世界模型，同时学习三条完整 OrangeDuck LAFAN 动作。网络与训练主干直接参考本机 `beyondmimic-umr` 已成功的最新 SuperMimic 分支，按 OpenSprite 重新适配。机器人为官方 Sprite0825，31 个驱动关节；仿真为 MuJoCo Warp/mjlab，物理 200 Hz、策略 50 Hz。
+[English](README.en.md)
 
-| 动作 | 源数据时长 | 用途 |
-| --- | ---: | --- |
-| `dance2_subject1` | 225.69 秒 | 长舞蹈 |
-| `fallAndGetUp3_subject1` | 102.19 秒 | 历史测试的倒地起身 |
-| `walk4_subject1` | 163.92 秒 | 较慢步行 |
+这是给 [OpenSprite](https://github.com/BeijingDynamics/open_sprite) 做的动作跟踪 demo，也是一套可以接着开发的脚手架。当前只训练 LAFAN 中一条 **225.66 秒的长舞蹈 `dance2_subject1`**：用 UMR 做机器人动作 retargeting，用 SuperMimic 方法训练，在 MuJoCo Warp 中仿真并生成视频。
 
-计划、选择依据、算法差异及交叉审查见 [docs/plan](docs/plan/README.md)。训练和结果记录见 [training-review](docs/plan/training-review.md)。
+仓库包含原始舞蹈、人体与机器人资产、retarget 代码和结果、训练配置、模型快照及示例视频。拉全 Git LFS 文件并安装依赖后，可以独立完成这条流程，不依赖其他项目目录。
 
-## 安装与数据
+## 视频与模型
 
-需要 Linux、兼容 CUDA 12.8 的 NVIDIA GPU 和 Python 3.12。所有项目代码、资产及选定源数据均在仓库内；`.reference/` 是可移除的调研材料。
+[![舞蹈视频预览](docs/media/dance-demo-preview.gif)](artifacts/videos/dance-model018000-full-1080p50.mp4)
+
+动图节选了开头、失败附近和结尾三个片段，有跳剪。[完整视频](artifacts/videos/dance-model018000-full-1080p50.mp4)为1080p、50fps，覆盖全部225.66秒源轨迹。
+
+| 文件 | 内容 |
+|---|---|
+| [30000轮训练快照](artifacts/checkpoints/model_030000.pt) | 本次发布锁定的中间快照，累计训练约5.86小时，预算为八小时 |
+| [18000轮示例快照](artifacts/checkpoints/model_018000.pt) | 对应示例视频，可用来重新仿真录制 |
+| [示例真实轨迹](artifacts/recordings/dance-model018000/rollout.npz) | 完整状态和动作，可直接重新渲染 |
+
+示例在 **193.76秒**首次判失败，之后仍由同一个策略继续真实仿真到结尾，没有重置、参考循环或停帧。完整视频展示了全过程，**不代表整段跟踪成功**。模型版本与视频版本分别标注，不能混用成绩。
+
+目前高动态跟踪还不理想。**部分关节在部分时刻已经吃满力矩上限，腾空等动作还是没跟上。** 视频里也能看到世界坐标漂移。实际施加力矩受到effort限幅；未限幅的PD请求大于上限，不等于实际输出超过上限。
+
+## 安装与快速运行
+
+环境为Linux、Python 3.12、CUDA 12.8；本实验使用RTX 5080 Laptop 16GB。视频需要FFmpeg/ffprobe，retarget需要Node.js 18或更新版本。模型和MP4使用Git LFS。
 
 ```bash
+git clone https://github.com/lzjever/opensprite-tracker.git
+cd opensprite-tracker
+git lfs install --local
+git lfs pull
+
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -r requirements-lock.txt
-PYTHONPATH=. .venv/bin/python scripts/validate_opensprite_model.py --seconds 60
-PYTHONPATH=. .venv/bin/python -m pytest -q tests
+.venv/bin/python scripts/demo.py check
 ```
 
-UMR 使用独立数值环境；FBX 解析需要 Node.js 18 或更新版本。公开版保留原始源数据；Geno/OpenSprite correspondence 和正式三动作库须在本地生成。重建命令：
+检查命令只做CPU和文件检查。模型若还是几行pointer文本，先运行`git lfs pull`。
+
+评估发布快照，从第一帧请求完整舞蹈：
+
+```bash
+.venv/bin/python scripts/demo.py evaluate --output outputs/my-evaluation
+```
+
+按示例协议重新仿真并录制完整视频，失败后继续运行：
+
+```bash
+.venv/bin/python scripts/demo.py record --output outputs/my-recording
+```
+
+评估默认用30000轮快照、seed42、三个实例；录制默认用18000轮示例快照、seed42、单实例。两者都可用`--checkpoint`指定模型。包装脚本显式使用本仓库的动作和机器人资产，覆盖快照中的历史绝对路径。
+
+从头训练自己的版本：
+
+```bash
+.venv/bin/python scripts/demo.py train --output outputs/my-dance --hours 8
+```
+
+它生成独立配置和账本，不覆盖现有实验。`--dry-run`可先查看命令。普通训练不依赖Codex；CLI小时审查是单独的可选工具。
+
+## 从原始舞蹈重新retarget
+
+[原始BVH](data/sources/lafan1-resolved/dance2_subject1.bvh)、[Geno模型与站姿](assets/geno/)、[OpenSprite资产](assets/opensprite/)和[UMR表面对应资产](assets/umr_correspondence/geno_opensprite0825/)均已包含。对应点、骨架和约束按OpenSprite的31关节、32 link构建。
+
+retarget使用独立环境：
 
 ```bash
 uv venv --python 3.12 .venv-umr
 uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
-node --version
-PYTHONPATH=. .venv/bin/python scripts/build_opensprite_model.py
-PYTHONPATH=. .venv-umr/bin/python scripts/retarget_lafan.py --stage all
-PYTHONPATH=. .venv/bin/python scripts/inspect_retarget_geometry.py \
-  data/motions/dance2_subject1.npz \
-  data/motions/fallAndGetUp3_subject1.npz \
-  data/motions/walk4_subject1.npz --render --self-collision
+.venv/bin/python scripts/demo.py check --profile all
+
+# 使用已有表面对应，重新优化原始舞蹈，再转换成训练动作库
+.venv/bin/python scripts/demo.py retarget --motions dance2_subject1
+.venv/bin/python scripts/demo.py build-motion
 ```
 
-正式 retarget 运行仓库内的原生 UMR NR 蒙皮表面优化器，使用 OpenSprite 32 个官方网格和全新 Geno/OpenSprite 4096-slot correspondence；不沿用 X2 的 correspondence、姿态、关节限位或机器人参数。`--stage build/train/retarget/convert` 可分别运行各阶段；已存在兼容 slots 时直接复用，retarget 总是按当前配置重新计算。原始 BVH 不改，完整保留三源时轴，逐源 FK/速度后合库。历史 IK 原型已隔离在忽略的诊断目录，不进入正式训练。
-
-官方位置/速度约束及最终地面检查通过；实际小幅 root-Z 补偿最大约 13–16 mm。原生 self-penetration 约束有 slack，舞蹈少量帧仍有 wrist/pelvis 穿插（最深 43.7 mm，超过 30 mm 的帧占 0.124%），因此三条均保留 `needs_review` 标签并如实记录几何残差，不宣称完美物理可行。详见 `data/motions/*.json`。
-
-## 训练、监控和评估
-
-正式配置与确切命令保存在 [configs/training.json](configs/training.json)。当前按团队交叉审查采用大WM2048×3和四层策略，先WM预热再联合训练；env768、WM每轮4×1024窗口、actor512条H32轨迹、critic保留5×4。详见[预热重训方案](docs/plan/warmstart-training.md)。使用此前新授权12小时的剩余预算，预热/编译/恢复均计入，不再刷新。
-
-完整 checkpoint 保存actor/critic/世界模型、双成本预测head、全部优化器、采样状态和累计时钟；恢复不能重置预算。
-
-训练入口支持 `--resume <checkpoint>`；监控入口在 tmux 中启动单个子任务，每小时保存 TensorBoard/GPU 遥测、在同配置异常退出后从最近完整快照恢复，并对累计时间设上限：
+从对应数据构建和网络训练一起重做：
 
 ```bash
-.venv/bin/python scripts/monitor_training.py --config configs/training.json
+.venv/bin/python scripts/demo.py retarget --stage all --motions dance2_subject1 \
+  --correspondence-dir outputs/my-correspondence
 ```
 
-SIGTERM/SIGINT 在完整训练 outer 边界保存退出。监控只控制它创建的进程组。查看 `outputs/<run>/supervisor.json`、`train-segment-*.log`、`reviews/` 和 TensorBoard；不修改或停止其他项目。
+原生UMR优化、FBX读取代码和所需JavaScript文件都在仓库内。新生成的文件默认放在`outputs/rebuild-dance`，完整重建后训练时指定生成的motion路径。详细命令、目录和分阶段用法见[独立复现说明](docs/reproduce.md)。
 
-小时智能审计按用户要求使用 CLI 后台进程，每 3600 秒串行调用一次 `codex exec`，立即执行首审。完整授权、预算核算和最终交付流程见 [hourly-audit-task.md](docs/plan/hourly-audit-task.md)。在独立 tmux 会话中运行：
+## 网络与训练逻辑
 
-```bash
-tmux new-session -d -s opensprite-hourly-audit '.venv/bin/python scripts/hourly_audit.py --config configs/training.json'
-```
+| 模块 | 设计 |
+|---|---|
+| Actor | 770维未来参考经`1024→512→256→32`编码，latent使用tanh；与10×105维观测历史拼接后，经`1024→512→256→31`解码；ELU，约323万参数 |
+| 世界模型 | 393维输入，`2048×3`隐藏层，SiLU和LayerNorm，预测140维局部状态增量；约950万参数 |
+| Critic | `1268→256→128→1` |
+| 成本预测 | 两个256/256隐藏层head，监督真实子步速度、力矩和接触指标 |
 
-审计有独占锁、执行日志与超时记录，API 故障不停止训练；不使用系统 service、timer、cron 或 Desktop。查看运行目录 `hourly/runner-state.json` 的状态/下次时间和 `hourly/latest.md` 的实际结论。需要机器持续开机及后台进程存活，重启后手动重启脚本。
+Actor观测包含关节位置/速度、IMU角速度和重力方向、上一步动作与参考相对姿态。它不直接观测根部世界位置或线速度。推理只运行actor；世界模型和critic用于训练。
 
-训练结束后，任务负责同一共享检查点的三动作×三 seed 完整请求评估和 ghost 视频，整理到 `outputs/delivery/opensprite_lafan3_tracker/`，披露真实未通过项；runner 核实交付完整且 trainer 停止后自动退出。
+真实仿真转移进入replay，世界模型做K=8自回归监督。Actor从真实状态出发展开H=32想象轨迹，通过奖励、软存活权重和critic尾值做BPTT。Actor更新时冻结世界模型和critic参数，保留状态与动作的导数。Critic用同批轨迹的固定λ-return目标拟合。
 
-逐动作评估同一 checkpoint，默认从每条第一帧运行至真实结尾，无自动 reset：
+| 当前训练配方 | 数值 |
+|---|---|
+| 预算 | 八小时；GPU设置、编译、预热和恢复计入，普通resume不刷新 |
+| 仿真/控制 | 5ms物理步，4个子步一次动作，200Hz/50Hz |
+| 并行环境/replay | 768env，CPU replay每env1000行，UTD=.4 |
+| 预热 | 500个outer只更新WM及成本head，各2000次Adam；随后联合训练 |
+| 联合更新 | 每outer WM 4×1024个K8窗口；actor一次512条H32轨迹；critic 5×4次Adam |
+| 优化 | lr=2e−4，γ=.99，λ=.95；AMP关闭、允许TF32 |
+| 执行器 | OpenSprite自己的PD和effort限制；无一阶力矩迟滞，保留0/1个5ms tick命令延迟、每4tick刷新、hold概率.9 |
 
-```bash
-PYTHONPATH=. .venv/bin/python scripts/evaluate_opensprite.py \
-  --checkpoint outputs/<run>/model_XXXXXX.pt \
-  --clip 0 --num-envs 3 --seed 42 \
-  --output outputs/<run>/eval/clip0-seed42
-```
+训练使用单条舞蹈，50Hz、11284个状态、11283次转移。reset按动作内部相位采样，混合均匀、低回报和历史分布。24个env不参与WM优化采样，但归一化仍看全部env。
 
-对clip1/2和seed43/44同样执行。评估目录包含`summary.json`及实际rollout；`python -m opensprite_tracker.supermimic.render --help`提供reference ghost视频入口。
+## 已知问题与后续开发
 
-主动截短只用于诊断，不能作为全程验收。正式参考分支使用相对姿态追踪配方，评估逐动作完整完成率、身体/关节/末端误差、全局漂移、最差片段和真实接触/力矩/速度峰值；完整物理成功与质量分开呈现。不能用平均回报或窗口成功代替整条长动作表现。
+- 腾空和接触切换仍会失败。力矩饱和后，继续增大策略输出没有增加实际可用力矩；参考高度、接触时序和动力学可行性需要一起检查。
+- 局部姿态更接近参考时，世界坐标漂移仍可能变大。相对身体误差、根部漂移和最差片段需要分别评估。
+- 速度超限、关节限位残留尚未消除。effort限幅不能代替速度和接触检查。
+- retarget结果保留`needs_review`：舞蹈有14帧局部自穿超过3cm，最深约4.37cm。数据可加载不等于动作已被证明动力学可行。
+- 短窗WM误差低，不代表H32想象和225秒闭环都可靠。microbatch只切分计算，不增加Adam步数。
+- checkpoint保存模型、Adam、归一化和采样统计；replay、RNG和live simulator状态会重建，恢复不是逐位无损续跑。
 
-## 来源和许可
+后续建议先固定完整源评估基线，再做受控对照。优先检查193秒附近的腾空/落地，校准足部尺度相关奖励，补充临界接触状态的采样覆盖，并验证长rollout误差。机器人侧需要继续做PD、传感器零偏、命令延迟和扭矩—速度能力的实际辨识。这些工作可以直接沿用现有retarget、训练、评估和视频入口。
 
-模型：[BeijingDynamics/open_sprite](https://github.com/BeijingDynamics/open_sprite)，AGPL-3.0。训练算法移植自最新 X2 SuperMimic 分支，保留第三方 notices；未沿用 X2 的关节轴、惯量或扭矩。LAFAN 来源及非商业研究条款保存在 `data/sources/lafan1-resolved/README.md` 和 `license.txt`。代码/资产许可与动作数据许可分别适用，详见 [LICENSE](LICENSE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 方法与许可
 
-## 公开分发范围
+动作重定向采用 [UMR](https://arxiv.org/abs/2609.02134)，训练采用 [SuperMimic](https://arxiv.org/abs/2610.28480) 方法。本仓库实现包含可选真实子步成本预测和上述训练配方。
 
-LAFAN原始数据的CC BY-NC-ND 4.0许可包含禁止分发衍生材料的条件。公开版保留未修改的原始源文件、许可证与归属说明，预计算重定向动作、采样/对应关系及其模型权重不进入公开Git历史。使用上文的原生UMR命令可在本仓库内生成这些本地研究资产，无需其他项目checkout。OpenSprite官方资产与第三方代码分别遵循仓库内保留的许可证。
-
-公开main使用独立的代码快照，避免旧历史带入受限衍生数据；本地研究历史、正在运行的训练及固定训练分支保持原样。
+本项目代码框架采用 **GNU AGPL v3**，与OpenSprite一致，见 [LICENSE](LICENSE)。第三方代码和机器人资产保留各自的版权与许可，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。LAFAN/Geno数据仍适用[原始数据许可](data/sources/lafan1-resolved/license.txt)及[Geno许可](assets/geno/license.txt)，不因代码采用AGPL而被重新授权。
