@@ -21,6 +21,26 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_source(config, root=None):
+    """Opt-in committed-source contract, checked again before every restart."""
+    if "source_commit" not in config:
+        return
+    root = ROOT if root is None else Path(root)
+    expected = config["source_commit"]
+    if not isinstance(expected, str) or not expected:
+        raise ValueError("source_commit must identify the fixed training commit")
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True,
+                          capture_output=True, text=True).stdout.strip()
+    if head != expected:
+        raise ValueError(f"Fixed training source changed: expected {expected}, HEAD is {head}")
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no", "--", ".",
+         ":(exclude)outputs", ":(exclude).reference"], cwd=root, check=True,
+        capture_output=True, text=True).stdout.strip()
+    if dirty:
+        raise ValueError("Fixed training source has tracked changes; commit source before launching: " + dirty)
+
+
 def atomic_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
@@ -128,6 +148,12 @@ def main():
             supervisor_log.write(message + "\n")
 
         while not stopping and elapsed < float(cfg["budget_seconds"]):
+            try:
+                validate_source(cfg)
+            except (ValueError, subprocess.CalledProcessError) as error:
+                state.update(status="needs_review", source_error=str(error))
+                announce(f"[FAIL] source validation rejected launch: {error}")
+                break
             segment = restarts
             logfile = run / f"train-segment-{segment:02d}.log"
             started = time.monotonic()

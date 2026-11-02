@@ -69,11 +69,17 @@ def build_plan(args):
     elif args.command == "train":
         hard = round(args.hours*3600)
         if hard <= 180: raise ValueError("hours must leave more than 180 seconds for shutdown reserve")
-        output = fresh_output(args.output, "train-dance")
-        cfg = json.loads((ROOT/"configs/demo/dance-8h.json").read_text())
+        output = fresh_output(args.output, f"train-dance-{args.preset}")
+        template = "dance-8h.json" if args.preset == "goal-sim" else "dance-goal-sim2real-8h.json"
+        cfg = json.loads((ROOT/"configs/demo"/template).read_text())
         relative = str(output.relative_to(ROOT))
         replacements = {"{run_dir}": relative, "{python}": python, "{motion}": str(motion.relative_to(ROOT)), "{soft_budget_seconds}": str(hard-180)}
-        cfg.update(run_dir=relative, budget_seconds=hard-180, hard_budget_seconds=hard, prior_training_seconds=0)
+        source_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                                       check=True, capture_output=True, text=True).stdout.strip()
+        cfg.update(run_dir=relative, budget_seconds=hard-180, hard_budget_seconds=hard,
+                   prior_training_seconds=0, source_commit=source_commit,
+                   delivery_dir=relative + "/delivery", evaluation_clips=[0],
+                   evaluation_seeds=[42, 43, 44], delivery_video_count=0)
         cfg["command"] = [replacements.get(value, value) for value in cfg["command"]]
         if any(flag in cfg["command"] for flag in ("--resume", "--initialize-from", "--world-model-from", "--resume-budget-record")):
             raise ValueError("Fresh demo training template must not inherit checkpoint state")
@@ -102,6 +108,9 @@ def build_plan(args):
 
 
 def execute(plan, command):
+    if command == "train":
+        from scripts.monitor_training import validate_source
+        validate_source(plan["config"], ROOT)
     for value in plan["required_files"]:
         problem = file_problem(value)
         if problem: raise ValueError(problem)
@@ -152,6 +161,7 @@ def parser():
         elif name == "train":
             s.add_argument("--output")
             s.add_argument("--hours", type=float, default=8.)
+            s.add_argument("--preset", choices=("goal-sim", "goal-sim2real"), default="goal-sim")
         else:
             s.add_argument("--motions", nargs="+", choices=("dance2_subject1",), default=["dance2_subject1"])
             s.add_argument("--output-dir", default="outputs/rebuild-dance/native")

@@ -12,6 +12,8 @@ import torch
 from .rotations import mat_to_6d, rot_angle_sq, yaw_mat
 from .state import flatten_state, invariant_features, unflatten_state
 from .robot import JOINT_NAMES, CONTEXT_SLICES
+from .observations import SENSOR_OBS_DIM, sensor_observation
+from .training_variants import TRAINING_VARIANTS
 from opensprite_tracker.constants import (PELVIS_HEIGHT_THRESHOLD_M,
     PELVIS_GRAVITY_SQUARED_THRESHOLD)
 
@@ -44,7 +46,8 @@ class MDP:
     uses_transition_metrics = False
     reward_scale = 0.1  # Maximum positive tracking reward per control step.
     def __init__(self, kin, motion, default_q: torch.Tensor,
-                 velocity_limits: torch.Tensor, cfg: RewardCfg | None = None):
+                 velocity_limits: torch.Tensor, cfg: RewardCfg | None = None,
+                 training_variant: str = "goal-sim"):
         self.kin, self.motion = kin, motion
         self.cfg = cfg or RewardCfg()
         self.default_q, self.velocity_limits = default_q, velocity_limits
@@ -53,18 +56,31 @@ class MDP:
         self.soft_hi = mid + half * self.cfg.soft_limit_factor
         self.feet = [kin.tracked_names.index(n) for n in
                      ("left_ankle_roll_link", "right_ankle_roll_link")]
+        self.set_training_variant(training_variant)
+
+    def set_training_variant(self, training_variant):
+        """Select only the actor interface; rewards and failures are unchanged."""
+        if training_variant not in TRAINING_VARIANTS:
+            raise ValueError(f"Unknown training variant: {training_variant}")
+        self.training_variant = training_variant
+        self.obs_dim = OBS_DIM if training_variant == "goal-sim" else SENSOR_OBS_DIM
         self.obs_noise = torch.tensor(
             [0.01] * NUM_J + [0.5] * NUM_J + [0.2] * 3 + [0.05] * 3
-            + [0.0] * NUM_J + [0.05] * 6, device=default_q.device)
+            + [0.0] * NUM_J
+            + ([0.05] * 6 if training_variant == "goal-sim" else []),
+            device=self.default_q.device)
 
     def obs(self, S, a_prev, xi, f):
-        """No root position/velocity or privileged parameters in actor input.
+        """Simulate sensors, with reference-relative orientation only in goal-sim.
 
         Encoder bias is sensor calibration error: same sign/convention as the
         source observation convention, also included in the model context.
         """
         _, _, _, _, q, qd = S[:6]
         imu_R, gyro, gravity = self.kin.imu(*S[:6])
+        if self.training_variant == "goal-sim2real":
+            q_sensor = q + xi[..., CONTEXT_SLICES["encoder_bias"]]
+            return sensor_observation(q_sensor, qd, gyro, gravity, a_prev, self.default_q)
         torso_id = self.kin.tracked_names.index("waist_yaw_link")
         reference_imu_R = self.motion.body_R[f, torso_id] @ self.kin.imu_site_R
         rel = mat_to_6d(imu_R.transpose(-1, -2) @ reference_imu_R)
@@ -172,11 +188,14 @@ def reward_config(profile="paper", recorded=None):
     raise ValueError(f"Unknown reward profile: {name}")
 
 
-def make_mdp(kin, motion, default_q, limits, cfg=None):
+def make_mdp(kin, motion, default_q, limits, cfg=None, training_variant="goal-sim"):
     cfg = cfg or RewardCfg()
     if cfg.profile == "paper":
-        return MDP(kin, motion, default_q, limits, cfg)
-    if cfg.profile == "legacy_full":
+        mdp = MDP(kin, motion, default_q, limits, cfg)
+    elif cfg.profile == "legacy_full":
         from .legacy_rewards import LegacyMDP
-        return LegacyMDP(kin, motion, default_q, limits, cfg)
-    raise ValueError(f"Unknown reward profile: {cfg.profile}")
+        mdp = LegacyMDP(kin, motion, default_q, limits, cfg)
+    else:
+        raise ValueError(f"Unknown reward profile: {cfg.profile}")
+    mdp.set_training_variant(training_variant)
+    return mdp

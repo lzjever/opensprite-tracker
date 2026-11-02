@@ -32,6 +32,7 @@ from .networks import Policy, WorldModel
 from .robot import CONTEXT_DIM, MEM_DIM
 from .evaluate import clip_bounds, resolve_motion_files, checkpoint_torque_lag_enabled
 from .rotations import rot_angle_sq
+from .training_variants import checkpoint_variant, observation_contract
 
 HORIZON = 8
 SCORED_STEPS = (1, 8)
@@ -40,9 +41,11 @@ SCORED_STEPS = (1, 8)
 def load_models(path, device, motion_override=None):
     """Load this project's trusted checkpoint, including frozen normalization."""
     ck = torch.load(path, map_location="cpu", weights_only=False)
+    variant = checkpoint_variant(ck)
     if ck.get("method") != "SuperMimic-OpenSprite-mjlab":
         raise ValueError("Expected a SuperMimic-OpenSprite-mjlab checkpoint")
     cfg = dict(ck["args"] if isinstance(ck["args"], dict) else vars(ck["args"]))
+    cfg["training_variant"] = variant
     from .robot import physical_contract
 
     if ck.get("robot_contract") != physical_contract(torque_lag_enabled=checkpoint_torque_lag_enabled(ck)):
@@ -78,9 +81,9 @@ def load_models(path, device, motion_override=None):
         weights["obs_norm.mean"].numel(),
         weights["goal_norm.mean"].numel(),
     )
-    if obs_dim != 105 or dec[-1] != 31 or goal_dim % 77:
+    if obs_dim != observation_contract(variant)["actor_obs_dim"] or dec[-1] != 31 or goal_dim % 77:
         raise ValueError(
-            "Checkpoint actor must use OpenSprite 105-observation / 31-action interface"
+            "Checkpoint actor does not match its OpenSprite observation/action interface"
         )
     pi = Policy(
         obs_dim,
@@ -198,6 +201,7 @@ def validate(args):
         default_joint_pos(args.device),
         velocity_limits(args.device),
         reward_cfg,
+        training_variant=cfg["training_variant"],
     )
     output.mkdir(parents=True, exist_ok=False)
     env = make_env(

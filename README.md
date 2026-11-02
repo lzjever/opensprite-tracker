@@ -59,9 +59,13 @@ uv pip install --python .venv/bin/python -r requirements-lock.txt
 
 ```bash
 .venv/bin/python scripts/demo.py train --output outputs/my-dance --hours 8
+
+# Actor仅使用关节传感器和IMU观测的独立配方
+.venv/bin/python scripts/demo.py train --preset goal-sim2real \
+  --output outputs/my-dance-sim2real --hours 8
 ```
 
-它生成独立配置和账本，不覆盖现有实验。`--dry-run`可先查看命令。普通训练不依赖Codex；CLI小时审查是单独的可选工具。
+默认配方为`goal-sim`；`goal-sim2real`生成另一套独立配置和账本，从零开始。正式启动要求已跟踪源码干净，并固定当前Git提交；`--dry-run`可在修改尚未提交时查看命令。普通训练不依赖Codex；CLI小时审查是单独的可选工具。
 
 ## 从原始舞蹈重新retarget
 
@@ -97,7 +101,16 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 | Critic | `1268→256→128→1` |
 | 成本预测 | 两个256/256隐藏层head，监督真实子步速度、力矩和接触指标 |
 
-Actor观测包含关节位置/速度、IMU角速度和重力方向、上一步动作与参考相对姿态。它不直接观测根部世界位置或线速度。推理只运行actor；世界模型和critic用于训练。
+上表为`goal-sim`及随仓库发布快照的结构。它的105维Actor观测包含关节位置/速度、IMU角速度和重力方向、上一步动作与6维参考相对姿态；最后一项依赖实际世界heading。
+
+| 配方 | Actor输入 | Critic主网络 |
+|---|---|---|
+| `goal-sim`（默认） | 10×105维历史 + 770维参考 | 1268→256→128→1 |
+| `goal-sim2real` | 10×99维传感器历史 + 同一770维参考 | 参考编码1024/512/256→latent32；特权特征与latent经1024/512/256→1 |
+
+新配方移除6维参考相对姿态，保留关节位置/速度、IMU gyro/重力投影和前次动作。Actor不读取实际全局位置、世界姿态或线速度；参考目标可离线计算。Critic允许全局特权，与Actor采用相同编码器/解码器宽度、ELU及latent32结构，参数各自独立。WM只用于训练，可用仿真真值。
+
+两种配方保持奖励、参考高度误差0.17m及重力平方误差1.6的失败标准。真实机器人仍需可靠的重力估计、传感器标定和IMU外参；`goal-sim2real`尚不代表已验证实机部署。详见[配方对比](docs/plan/goal-sim2real.md)。
 
 真实仿真转移进入replay，世界模型做K=8自回归监督。Actor从真实状态出发展开H=32想象轨迹，通过奖励、软存活权重和critic尾值做BPTT。Actor更新时冻结世界模型和critic参数，保留状态与动作的导数。Critic用同批轨迹的固定λ-return目标拟合。
 

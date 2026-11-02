@@ -35,6 +35,7 @@ import torch
 
 from . import networks
 from .networks import Policy
+from .training_variants import checkpoint_variant, observation_contract
 
 
 def resolve_motion_files(override, cfg):
@@ -86,7 +87,9 @@ def checkpoint_torque_lag_enabled(checkpoint):
 def load_policy(checkpoint, device="cpu", motion_override=None):
     """Own checkpoints only; infer exact architecture from weights and train args."""
     ck = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    variant = checkpoint_variant(ck)
     cfg = dict(ck["args"] if isinstance(ck["args"], dict) else vars(ck["args"]))
+    cfg["training_variant"] = variant
     from .robot import physical_contract
 
     if (
@@ -217,7 +220,7 @@ def summarize(metrics, mask, joint_names):
 @torch.no_grad()
 def evaluate(args):
     from .env import TrackingSim
-    from .mdp import OBS_DIM, make_mdp, reward_config
+    from .mdp import make_mdp, reward_config
     from .motion import MotionLib
     from .robot import (
         CONTROL_DT,
@@ -238,7 +241,8 @@ def evaluate(args):
     requested_lag = getattr(args, "torque_lag", None)
     if requested_lag is not None and requested_lag != torque_lag_enabled:
         raise ValueError("Evaluation torque-lag setting must match the checkpoint; command delay remains enabled")
-    if pi.obs_dim != OBS_DIM or pi.action_dim != len(JOINT_NAMES):
+    if (pi.obs_dim != observation_contract(cfg["training_variant"])["actor_obs_dim"]
+            or pi.action_dim != len(JOINT_NAMES)):
         raise ValueError(
             "checkpoint actor interface does not match current OpenSprite MDP"
         )
@@ -284,6 +288,7 @@ def evaluate(args):
         default_joint_pos(args.device),
         velocity_limits(args.device),
         reward_cfg,
+        training_variant=cfg["training_variant"],
     )
     output = new_output(args.output, "eval")
     env = TrackingSim(
@@ -476,6 +481,8 @@ def evaluate(args):
         git_commit = None
     metadata = {
         "schema": 1,
+        "training_variant": cfg["training_variant"],
+        "observation_contract": observation_contract(cfg["training_variant"]),
         "checkpoint": str(checkpoint),
         "iteration": iteration,
         "motion": str(motion_paths[0])

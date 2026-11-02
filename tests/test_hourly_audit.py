@@ -146,3 +146,27 @@ def test_four_hour_campaign_uses_its_own_hard_limit(campaign):
     cfg["budget_seconds"] = 43020
     with pytest.raises(ValueError, match="hard budget"):
         audit.snapshot(root, cfg, run)
+
+
+def test_trainer_identity_uses_the_configured_source_worktree(campaign):
+    root, run, _, _ = campaign
+    source = root / "outputs/worktrees/fixed-source"
+    source.mkdir(parents=True)
+    command = [sys.executable, "-c", "import time; time.sleep(20)"]
+    process = subprocess.Popen(command, cwd=source)
+    try:
+        state = {"pid": process.pid, "command": command, "active_seconds": 100,
+                 "status": "running"}
+        (run / "supervisor.json").write_text(json.dumps(state))
+        config = {"run_dir": str(run), "budget_seconds": 28620,
+                  "hard_budget_seconds": 28800, "source_root": str(source),
+                  "source_commit": "fixed-commit"}
+        assert not audit.trainer_alive(root, state)
+        assert audit.trainer_alive(root, state, str(source))
+        result = audit.snapshot(root, config, run)
+        assert result["verified_trainer_alive"] is True
+        assert result["source_root"] == str(source)
+        assert result["source_commit"] == "fixed-commit"
+    finally:
+        process.terminate()
+        process.wait(timeout=5)

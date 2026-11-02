@@ -28,9 +28,13 @@ from torch.utils.tensorboard import SummaryWriter
 from . import networks
 from .buffer import ReplayBuffer
 from .engine import Learner
-from .mdp import OBS_DIM, make_mdp, reward_config
+from .mdp import make_mdp, reward_config
 from .motion import MotionLib
-from .networks import Critic, Policy, WorldModel
+from .networks import Critic, GoalCritic, Policy, WorldModel
+from .training_variants import (
+    GOAL_SIM, GOAL_SIM2REAL, TRAINING_VARIANTS,
+    observation_contract, validate_variant_load,
+)
 from .robot import (
     CONTEXT_DIM,
     MEM_DIM,
@@ -47,6 +51,8 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--dataset-revision", default="")
+    p.add_argument("--training-variant", choices=TRAINING_VARIANTS, default=GOAL_SIM,
+                   help="goal-sim preserves the original interface; goal-sim2real uses sensor-only actor observations and a privileged goal-encoder critic")
     p.add_argument(
         "--allow-diagnostic-motion", choices=("True", "False"), default="False"
     )
@@ -301,7 +307,11 @@ def write_resume_transfer_proof(learner, sampler, checkpoint, ancestry, destinat
 
 
 def checkpoint(learner, args, iteration, sim_steps, wall_seconds, sampler=None):
+    variant = getattr(args, "training_variant", GOAL_SIM)
     result = {
+        "training_variant": variant,
+        "observation_contract": observation_contract(variant),
+        "training_source_commit": getattr(learner, "source_commit", None),
         "initialization": getattr(learner, "initialization", None),
         "budget_ancestry": getattr(learner, "budget_ancestry", None),
         "wm": learner.wm.state_dict(),
@@ -361,6 +371,7 @@ def main():
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
     args = parser().parse_args()
+    source_checkpoint = None
     if not math.isfinite(args.wm_loss_scale) or args.wm_loss_scale <= 0:
         raise ValueError("WM loss scale must be finite and positive")
     torch.set_num_threads(4)
@@ -368,6 +379,11 @@ def main():
         raise ValueError("Use exactly one of resume, initialize-from or world-model-from")
     if args.resume_budget_record is not None and not args.resume:
         raise ValueError("--resume-budget-record requires --resume")
+    source_path = args.resume or args.initialize_from or args.world_model_from
+    if source_path is not None:
+        source_checkpoint = torch.load(source_path, map_location="cpu", weights_only=False)
+        validate_variant_load(source_checkpoint, args.training_variant)
+        validate_checkpoint_actuator(source_checkpoint, args)
     if args.wm_validation_envs and (args.wm_validation_every < 1 or args.wm_validation_batch < 1):
         raise ValueError("WM validation interval and batch must be positive")
     if not args.full_body_collision:
@@ -432,8 +448,10 @@ def main():
     if args.full_body_collision and rcfg.profile == "legacy_full":
         rcfg.include_body_impact = True
     mdp = make_mdp(
-        kin, motion, default_joint_pos(args.device), velocity_limits(args.device), rcfg
+        kin, motion, default_joint_pos(args.device), velocity_limits(args.device), rcfg,
+        training_variant=args.training_variant,
     )
+    obs_dim = mdp.obs_dim
     env = TrackingSim(
         num_envs=args.num_envs,
         motion=motion,
@@ -471,7 +489,7 @@ def main():
         hidden=(args.wm_width,) * 3, context_dim=CONTEXT_DIM, memory_dim=MEM_DIM
     ).to(args.device)
     pi = Policy(
-        OBS_DIM, 77 * args.goal_frames, hist=args.hist, hidden=args.policy_hidden
+        obs_dim, 77 * args.goal_frames, hist=args.hist, hidden=args.policy_hidden
     ).to(args.device)
     goal = motion.goal(env.f, args.goal_frames)
     with torch.no_grad():
@@ -479,7 +497,10 @@ def main():
             mdp.critic_features(env.state(), env.f, env.normalize_xi(env.xi)).shape[-1]
             + goal.shape[-1]
         )
-    critic = Critic(critic_dim).to(args.device)
+    critic = (
+        GoalCritic(critic_dim, goal_dim=goal.shape[-1], hidden=args.policy_hidden)
+        if args.training_variant == GOAL_SIM2REAL else Critic(critic_dim)
+    ).to(args.device)
     transition_model = None
     extras = None
     if mdp.uses_transition_metrics:
@@ -514,6 +535,7 @@ def main():
         transition_model=transition_model,
     )
     learner.impact_ramp = env.impact_ramp
+    learner.source_commit = git_commit
     learner.initialization = {
         "mode": "cold_start",
         "loaded_modules": [],
@@ -524,7 +546,7 @@ def main():
     }
     start, sim_steps, wall_offset = 0, 0, 0.0
     if args.resume:
-        ck = torch.load(args.resume, map_location="cpu" if args.resume_budget_record else args.device, weights_only=False)
+        ck = source_checkpoint
         validate_checkpoint_actuator(ck, args)
         transfer = resume_budget_transfer(ck, args)
         from .robot import physical_contract
@@ -592,9 +614,7 @@ def main():
             flush=True,
         )
     elif args.initialize_from:
-        ck = torch.load(
-            args.initialize_from, map_location=args.device, weights_only=False
-        )
+        ck = source_checkpoint
         validate_checkpoint_actuator(ck, args)
         wm.load_state_dict(ck["wm"])
         pi.load_state_dict(ck["pi"])
@@ -613,7 +633,7 @@ def main():
         from .robot import physical_contract
 
         source = args.world_model_from.resolve(strict=True)
-        ck = torch.load(source, map_location="cpu", weights_only=False)
+        ck = source_checkpoint
         validate_checkpoint_actuator(ck, args)
         learner.initialization = initialize_world_model(
             learner, ck, robot_contract=physical_contract(torque_lag_enabled=not args.disable_torque_lag),
@@ -638,7 +658,7 @@ def main():
         coverage.set_iteration(start, "refill")
         learner.coverage_audit = coverage
     writer = SummaryWriter(str(args.output / "tensorboard"))
-    history = torch.zeros(args.num_envs, args.hist, OBS_DIM, device=args.device)
+    history = torch.zeros(args.num_envs, args.hist, obs_dim, device=args.device)
     stats = {}
     stats_count = {}
 
@@ -747,14 +767,16 @@ def main():
     if coverage is not None:
         coverage.flush("replay_refill")
     print(
-        f"READY real_steps={sim_steps} actor={OBS_DIM}x{args.hist}+goal={goal.shape[-1]} "
+        f"READY real_steps={sim_steps} variant={args.training_variant} actor={obs_dim}x{args.hist}+goal={goal.shape[-1]} "
         f"action=31 state={75 + MEM_DIM} context={CONTEXT_DIM} critic={critic_dim}",
         flush=True,
     )
     (args.output / "interface.json").write_text(
         json.dumps(
             {
-                "obs_dim": OBS_DIM,
+                "training_variant": args.training_variant,
+                "observation_contract": observation_contract(args.training_variant),
+                "obs_dim": obs_dim,
                 "history": args.hist,
                 "goal_dim": goal.shape[-1],
                 "action_dim": 31,
@@ -762,6 +784,13 @@ def main():
                 "memory_dim": MEM_DIM,
                 "context_dim": CONTEXT_DIM,
                 "critic_dim": critic_dim,
+                "critic_architecture": type(critic).__name__,
+                "actor_hidden": list(args.policy_hidden),
+                "critic_uses_privileged_state": True,
+                "parameter_counts": {
+                    name: sum(p.numel() for p in module.parameters())
+                    for name, module in (("actor", pi), ("critic", critic), ("world_model", wm))
+                },
                 "physics_dt": 0.005,
                 "policy_dt": 0.02,
                 "reward": vars(mdp.cfg),

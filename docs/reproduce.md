@@ -50,6 +50,10 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 
 ```bash
 .venv/bin/python scripts/demo.py train --output outputs/my-dance --hours 8
+
+# 独立的传感器Actor配方，重新冷启动八小时
+.venv/bin/python scripts/demo.py train --preset goal-sim2real \
+  --output outputs/my-dance-sim2real --hours 8
 ```
 
 使用自己重新retarget的动作库：
@@ -59,7 +63,9 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
   --motion outputs/rebuild-dance/motions/lafan_dance.npz
 ```
 
-命令按 `configs/demo/dance-8h.json` 生成独立 `demo-training.json`，由monitor维护累计预算和故障恢复。目录必须全新。八小时含设置、编译及预热，预留180秒停止保存。正常恢复不刷新时钟；monitor恢复同一run时可再次运行：
+默认`--preset goal-sim`使用`configs/demo/dance-8h.json`，`goal-sim2real`使用`configs/demo/dance-goal-sim2real-8h.json`。命令生成独立`demo-training.json`，记录当前Git提交，由monitor维护累计预算和故障恢复。目录必须全新；新配方不继承旧模型、优化器或账本。正式启动及恢复要求HEAD匹配配置中的`source_commit`，且已跟踪源码无未提交修改；`outputs/`中的产物不影响检查。修改后先提交，再生成正式配置；`--dry-run`无需干净源码。
+
+新Actor为99维传感器观测，Critic仍可使用全局特权且主网络与Actor同构。WM为训练专用。两种配方的物理、数据、奖励及高度/重力失败门槛保持一致，详见[配方说明](plan/goal-sim2real.md)。八小时含设置、编译及预热，soft28620秒、hard28800秒，预留180秒停止保存。启动前GPU验收若属于同一训练任务，应计入该任务的累计账本，不能重新获得八小时。正常恢复不刷新时钟；monitor恢复同一run时可再次运行：
 
 ```bash
 .venv/bin/python scripts/monitor_training.py \
@@ -67,6 +73,8 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 ```
 
 恢复前确认该run的monitor和trainer均已退出。checkpoint恢复模型、优化器和统计；replay、RNG与仿真状态重建，不保证逐位续跑。`metrics.csv`、`supervisor.json`和checkpoint位于训练输出目录。
+
+CLI每小时审查为可选工具，新配方使用[独立审查任务](plan/hourly-audit-goal-sim2real-8h-task.md)，从传入配置读取run和预算。常规审查使用CPU，必要的GPU评估串行安排。最终对clip0、seed42/43/44各N3请求完整源轨迹，完整录像与成功率分别报告。
 
 ## 评估和完整录像
 

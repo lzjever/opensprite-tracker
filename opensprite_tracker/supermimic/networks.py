@@ -248,3 +248,33 @@ class Critic(nn.Module):
 
     def forward(self, x):
         return run_mlp(self.net, self.norm(x)).squeeze(-1)
+
+
+class GoalCritic(nn.Module):
+    """Privileged value model with the actor's goal-encoder/decoder structure.
+
+    Inputs remain [privileged features, raw reference goal] for the learner's
+    existing full-batch normalization and terminal-value gradient paths. The
+    coordinate-wise normalizer is equivalent to separate privileged/goal
+    normalizers; neither its statistics nor network weights are shared with
+    the actor. This single-state value model approximates a history policy's
+    value without claiming the privileged features contain its full history.
+    """
+
+    def __init__(self, in_dim, goal_dim=770, hidden=(1024, 512, 256), z_dim=32):
+        super().__init__()
+        if goal_dim < 1 or in_dim <= goal_dim:
+            raise ValueError("GoalCritic needs positive goal and privileged dimensions")
+        if z_dim < 1:
+            raise ValueError("GoalCritic latent dimension must be positive")
+        self.in_dim, self.goal_dim = in_dim, goal_dim
+        self.privileged_dim = in_dim - goal_dim
+        self.norm = RunningNorm(in_dim)
+        self.enc = mlp(goal_dim, hidden, z_dim)
+        self.dec = mlp(self.privileged_dim + z_dim, hidden, 1)
+
+    def forward(self, x):
+        x = self.norm(x)
+        privileged, goal = x.split((self.privileged_dim, self.goal_dim), dim=-1)
+        z = torch.tanh(run_mlp(self.enc, goal))
+        return run_mlp(self.dec, torch.cat((privileged, z), -1)).squeeze(-1)

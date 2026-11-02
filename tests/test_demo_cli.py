@@ -1,5 +1,6 @@
 """CPU-only command planning and missing-LFS guards; never launch the simulator."""
 from pathlib import Path
+import json
 import subprocess
 import sys
 import venv
@@ -36,11 +37,33 @@ def test_training_plan_is_fresh_8h_and_does_not_write_active_config():
     cfg = first["config"]
     assert (cfg["budget_seconds"], cfg["hard_budget_seconds"], cfg["prior_training_seconds"]) == (28620, 28800, 0)
     assert cfg["run_dir"].startswith("outputs/demo/train-dance-")
+    assert "goal-sim-" in cfg["run_dir"]
+    assert cfg["source_commit"] == subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=demo.ROOT, check=True,
+        capture_output=True, text=True).stdout.strip()
     assert not any(flag in cfg["command"] for flag in ("--resume", "--initialize-from", "--world-model-from", "--resume-budget-record"))
     assert first["config_path"].endswith("demo-training.json")
     assert (active.read_bytes() if active.exists() else None) == before
     with pytest.raises(ValueError, match="already exists"):
         demo.build_plan(parse("train", "--output", "outputs"))
+
+
+def test_sim2real_preset_preserves_recipe_and_gets_independent_cold_ledger():
+    old = json.loads((demo.ROOT/"configs/demo/dance-8h.json").read_text())
+    new = json.loads((demo.ROOT/"configs/demo/dance-goal-sim2real-8h.json").read_text())
+    assert new["command"] == old["command"] + ["--training-variant", "goal-sim2real"]
+    legacy = demo.build_plan(parse("train", "--dry-run"))
+    plan = demo.build_plan(parse("train", "--preset", "goal-sim2real", "--dry-run"))
+    cfg = plan["config"]
+    assert "train-dance-goal-sim2real-" in cfg["run_dir"]
+    assert cfg["run_dir"] != legacy["config"]["run_dir"]
+    assert cfg["delivery_dir"] == cfg["run_dir"] + "/delivery"
+    assert cfg["delivery_dir"] != legacy["config"]["delivery_dir"]
+    assert (cfg["budget_seconds"], cfg["hard_budget_seconds"], cfg["prior_training_seconds"]) == (28620, 28800, 0)
+    assert cfg["evaluation_clips"] == [0] and cfg["evaluation_seeds"] == [42, 43, 44]
+    assert cfg["delivery_video_count"] == 0
+    assert cfg["command"][-2:] == ["--training-variant", "goal-sim2real"]
+    assert not Path(plan["create_parent"]).exists()
 
 
 def test_explicit_paths_are_single_argv_tokens_and_do_not_depend_on_cwd(monkeypatch, tmp_path):

@@ -47,14 +47,15 @@ def local_path(root, value):
     return path
 
 
-def trainer_alive(root, state):
+def trainer_alive(root, state, source_root=None):
     pid = state.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return False
     try:
         proc = Path("/proc") / str(pid)
         argv = proc.joinpath("cmdline").read_bytes().decode().rstrip("\0").split("\0")
-        return argv == state.get("command") and proc.joinpath("cwd").resolve() == root
+        expected_cwd = local_path(root, source_root) if source_root is not None else root.resolve()
+        return argv == state.get("command") and proc.joinpath("cwd").resolve() == expected_cwd
     except (OSError, ValueError):
         return False
 
@@ -85,8 +86,10 @@ def snapshot(root, config, run):
         "root": str(root),
         "run_dir": str(run),
         "source_branch": config.get("source_branch"),
+        "source_root": str(local_path(root, config.get("source_root", "."))),
+        "source_commit": config.get("source_commit"),
         "supervisor": supervisor,
-        "verified_trainer_alive": trainer_alive(root, supervisor),
+        "verified_trainer_alive": trainer_alive(root, supervisor, config.get("source_root")),
         "campaign_seconds": campaign,
         "prior_training_seconds": prior,
         "formal_elapsed_seconds": max(0.0, campaign - prior),
@@ -157,7 +160,7 @@ def delivery_complete(root, run, config=None):
         if artifact(name).suffix.lower() != ".mp4":
             raise ValueError("Expected ghost MP4 videos")
     supervisor = read_json(run / "supervisor.json")
-    if trainer_alive(root, supervisor) or supervisor.get("status") in ("running", "starting"):
+    if trainer_alive(root, supervisor, config.get("source_root")) or supervisor.get("status") in ("running", "starting"):
         raise ValueError("Cannot finish auditing while training is still running")
     return True
 
@@ -207,6 +210,7 @@ class Launcher:
             if local_path(self.root, config["run_dir"]) != self.run:
                 raise ValueError("Campaign run_dir changed; refusing to monitor another run")
             context = snapshot(self.root, config, self.run)
+            context["config_path"] = str(self.config_path)
             try:
                 if self.delivered():
                     state["status"] = "delivery_complete"

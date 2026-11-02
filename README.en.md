@@ -47,7 +47,16 @@ Training fits a world model to real simulation transitions and differentiates im
 | Validation / precision | **24 WM optimization holdout environments**; normalization still sees all environments. AMP disabled, TF32 enabled. |
 | Actuation | **Torque lag disabled**, τ=0. **Command delay retained**: 0/1 physics tick, hold probability 0.9, refreshed every four ticks. |
 
-The actor receives observation history and future reference. The world model and critic use privileged root state, physical context, and actuator memory during training.
+The table describes `goal-sim`, the default preset used by the included snapshots. Its 105-dimensional actor observation includes a six-dimensional relative reference orientation that depends on actual world heading. The world model and critic use privileged root state, physical context, and actuator memory during training.
+
+| Preset | Actor input | Critic main network |
+|---|---|---|
+| `goal-sim` (default) | 10 × 105 observations + 770 reference features | 1268 → 256 → 128 → 1 |
+| `goal-sim2real` | 10 × 99 sensor observations + the same 770 reference features | Reference encoder 1024/512/256 → latent32; privileged features + latent → decoder 1024/512/256 → 1 |
+
+`goal-sim2real` removes the relative orientation. The actor uses joint position/velocity, IMU gyro and gravity projection, and the previous action. It receives no actual global position, world orientation, or linear velocity; reference features can be computed offline. The privileged critic mirrors the actor's encoder/decoder widths, ELU activations and tanh latent32, with independent weights. The world model is used only in training and may use simulation truth.
+
+Physics, rewards, and failure thresholds remain unchanged: reference height error 0.17 m and squared gravity error 1.6. Real hardware still requires calibrated sensors, IMU extrinsics and reliable gravity estimation. This preset does not establish real-robot readiness. See the [preset comparison](docs/plan/goal-sim2real.md).
 
 Actor updates backpropagate through imagined rewards, soft survival, and the critic's tail value. World-model and critic parameters are frozen during that update while state/action derivatives remain active. The critic fits fixed λ-return targets from the same imagined trajectories.
 
@@ -133,9 +142,13 @@ Start a new eight-hour run using the rebuilt motion:
 .venv/bin/python scripts/demo.py train \
   --motion outputs/rebuild-dance/motions/lafan_dance.npz \
   --output outputs/demo/my-dance-training --hours 8
+
+# Start the sensor-only actor preset with a separate cold budget.
+.venv/bin/python scripts/demo.py train --preset goal-sim2real \
+  --output outputs/demo/my-dance-sim2real --hours 8
 ```
 
-Use `data/motions/lafan_dance.npz` to train on the included prepared clip instead. The command creates a fresh configuration and budget ledger inside its new output directory. It does not edit the active training configuration. The supervisor checkpoints at update boundaries and preserves cumulative time across ordinary recovery. Full retargeting and tracker training require substantial computation; three-frame checks validate installation, not tracking quality.
+Use `data/motions/lafan_dance.npz` to train on the included prepared clip instead. The default preset remains `goal-sim`. Each command creates a fresh configuration and budget ledger inside a new output directory and records the current Git commit. Launch and recovery require that commit and clean tracked source files; output artifacts are excluded. `--dry-run` remains available before committing edits. The supervisor checkpoints at update boundaries and preserves cumulative time across ordinary recovery. Full retargeting and tracker training require substantial computation; three-frame checks validate installation, not tracking quality.
 
 ## Limitations
 
