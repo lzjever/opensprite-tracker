@@ -1,5 +1,5 @@
 {
-  "schema": "opensprite-release-artifacts-v1",
+  "schema": "opensprite-release-artifacts-v2",
   "motion": {
     "name": "dance2_subject1",
     "path": "data/motions/lafan_dance.npz",
@@ -10,30 +10,46 @@
   },
   "checkpoints": [
     {
+      "path": "artifacts/checkpoints/goal-sim2real_model_024000.pt",
+      "training_variant": "goal-sim2real",
+      "iteration": 24000,
+      "role": "snapshot_for_latest_published_recording",
+      "authorized_training_budget_hours": 8,
+      "is_completed_budget_final": false,
+      "path_metadata_only_relocated": true,
+      "original_sha256": "b9711c1f157782fd9539f2069d1c247cbc8887d2928d1f121533a9adb5a75cd4",
+      "publication_proof": "artifacts/recordings/goal-sim2real-model024000/publication.json"
+    },
+    {
       "path": "artifacts/checkpoints/model_030000.pt",
       "iteration": 30000,
-      "role": "latest_locked_intermediate_snapshot",
+      "role": "retained_goal_sim_intermediate_snapshot",
       "training_runtime_seconds": 21082.89282969013,
       "training_runtime_hours": 5.856359119358369,
       "authorized_training_budget_hours": 8,
       "is_completed_budget_final": false,
-      "evaluation_note": "No evaluation of this snapshot is bundled; the video uses iteration 18000."
+      "evaluation_note": "No evaluation of this snapshot is bundled; the retained goal-sim video uses iteration 18000.",
+      "training_variant": "goal-sim"
     },
     {
       "path": "artifacts/checkpoints/model_018000.pt",
       "iteration": 18000,
-      "role": "snapshot_used_for_bundled_full_recording"
+      "role": "snapshot_for_goal_sim_bilibili_example",
+      "training_variant": "goal-sim"
     }
   ],
   "recording": {
-    "checkpoint": "artifacts/checkpoints/model_018000.pt",
-    "rollout": "artifacts/recordings/dance-model018000/rollout.npz",
-    "summary": "artifacts/recordings/dance-model018000/summary.json",
-    "render_info": "artifacts/recordings/dance-model018000/render.json",
-    "verification": "artifacts/recordings/dance-model018000/verification.json",
-    "preview": "artifacts/recordings/dance-model018000/preview.png",
-    "reproduction_instructions": "artifacts/recordings/dance-model018000/README.md",
-    "video": "artifacts/videos/dance-model018000-full-1080p50.mp4",
+    "id": "goal-sim2real-model024000",
+    "training_variant": "goal-sim2real",
+    "checkpoint": "artifacts/checkpoints/goal-sim2real_model_024000.pt",
+    "rollout": "artifacts/recordings/goal-sim2real-model024000/rollout.npz",
+    "summary": "artifacts/recordings/goal-sim2real-model024000/summary.json",
+    "render_info": "artifacts/recordings/goal-sim2real-model024000/render.json",
+    "verification": "artifacts/recordings/goal-sim2real-model024000/verification.json",
+    "publication_proof": "artifacts/recordings/goal-sim2real-model024000/publication.json",
+    "preview": "artifacts/recordings/goal-sim2real-model024000/preview.png",
+    "reproduction_instructions": "artifacts/recordings/goal-sim2real-model024000/README.md",
+    "video": "artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4",
     "seed": 42,
     "num_envs": 1,
     "first_failure_seconds": 193.76,
@@ -51,16 +67,17 @@
     "height": 1080,
     "fps": 50,
     "video_frames": 11284,
-    "interpretation": "The full recording includes real post-failure actor/physics behavior. Full simulation does not mean successful tracking; standard scores stop after the first-failure transition.",
-    "release_metadata_note": "Only path metadata was relocated to repository-relative paths. All 78 non-metadata arrays preserve original dtype, shape and values. The render system font is recorded by filename.",
+    "interpretation": "Complete continued simulation is not complete tracking success. This is the intermediate checkpoint selected at recording time.",
+    "original_recording_checks_passed": 80,
+    "release_metadata_note": "The new checkpoint and recording metadata use repository-relative paths. Tensor and trajectory equivalence is documented separately from the original recording checks.",
     "rerender_argv": [
       ".venv/bin/python",
       "-m",
       "opensprite_tracker.supermimic.render",
       "--rollout",
-      "artifacts/recordings/dance-model018000/rollout.npz",
+      "artifacts/recordings/goal-sim2real-model024000/rollout.npz",
       "--output",
-      "outputs/rerender-dance-model018000",
+      "outputs/rerender-goal-sim2real-model024000",
       "--model",
       "assets/opensprite/opensprite.xml",
       "--env-index",
@@ -71,14 +88,17 @@
       "1080",
       "--fps",
       "50",
-      "--include-post-failure"
+      "--include-post-failure",
+      "--failure-hold-seconds",
+      "0"
     ]
   },
   "verification": {
-    "existing_recording_integrity": "pass",
-    "existing_recording_checks_passed": 63,
-    "release_arrays_unchanged_except_metadata_json": 78,
-    "new_simulation_or_render_performed_for_packaging": false
+    "scope": "Original recording integrity plus metadata-only publication equivalence; no additional simulation or rendering during packaging.",
+    "primary_original_recording_checks_passed": 80,
+    "primary_release_arrays_exact": 78,
+    "primary_release_checkpoint_tensors_exact": 253,
+    "publication_proof": "artifacts/recordings/goal-sim2real-model024000/publication.json"
   },
   "files": {
     "artifacts/checkpoints/model_030000.pt": {
@@ -112,6 +132,167 @@
     "artifacts/videos/dance-model018000-full-1080p50.mp4": {
       "bytes": 158168254,
       "sha256": "33e738a926e083288e3186b398ed763536407cfe7c3e9cb0dd61edfa949039e1"
+    },
+    "artifacts/checkpoints/goal-sim2real_model_024000.pt": {
+      "bytes": 189416190,
+      "sha256": "fb3dc3940ed56dcadc4ab10c02c58306f8676177d3a7f7a4aa38a29924d3189f"
+    },
+    "artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4": {
+      "bytes": 130158797,
+      "sha256": "1dc5f9f3f5f0a46430025f43dd2f426ef8c239ab9481bed2f8e727fff9171e89"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/README.md": {
+      "bytes": 1850,
+      "sha256": "4f73728f7e02149309527d7316eab0840d850d7557e98dac29aa07f2d5579c11"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/preview.png": {
+      "bytes": 418798,
+      "sha256": "2b721ce69ca58e17d436fd0af179ef84ace9154ba3ad7558f0e9d921533ab072"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/qa-last.png": {
+      "bytes": 574500,
+      "sha256": "c99da8ab53d8c0af4a73c122323a97a0bc4a03d8c72809e00b855ad3551f26f9"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/qa-postfailure.png": {
+      "bytes": 614306,
+      "sha256": "93dc0cd9c9cf0b31d35c71ccc7f416a382f0f31ed2fe9d9143af2d6eae64e290"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/render.json": {
+      "bytes": 2089,
+      "sha256": "f82a376654efb8ab42acab0a2b9808dae16c77bbf7c8a5a49c4501ea2f84c7f5"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/rollout.npz": {
+      "bytes": 16455117,
+      "sha256": "530edb8f88521647ddb91d882a9198fcc5d00c223ac8e5c422c556aa5737b094"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/summary.json": {
+      "bytes": 98455,
+      "sha256": "c7066c4f28f17f74628a1bb8511b32c938c0b5165ef88fc6ddf22fc428fcd0bd"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/verification.json": {
+      "bytes": 7151,
+      "sha256": "7a58ea937c4361a65e2f483437ba3d1763f8cf0b37b3874b075944f105e7519c"
+    },
+    "docs/media/goal-sim2real-model024000-poster.png": {
+      "bytes": 418798,
+      "sha256": "2b721ce69ca58e17d436fd0af179ef84ace9154ba3ad7558f0e9d921533ab072"
+    },
+    "artifacts/recordings/goal-sim2real-model024000/publication.json": {
+      "bytes": 1145,
+      "sha256": "c200f930114a8ae8c002b56626843832bdf3cc278c678b7bc0c33ef620e13fca"
+    },
+    "docs/media/goal-sim2real-model024000-preview.gif": {
+      "bytes": 6713010,
+      "sha256": "f4ac4b9999a606234e30c564367ab037b1f22d1a51c2662e98bc22e3c75f1cf5"
     }
-  }
+  },
+  "primary_recording": "goal-sim2real-model024000",
+  "recordings": [
+    {
+      "id": "goal-sim2real-model024000",
+      "training_variant": "goal-sim2real",
+      "checkpoint": "artifacts/checkpoints/goal-sim2real_model_024000.pt",
+      "rollout": "artifacts/recordings/goal-sim2real-model024000/rollout.npz",
+      "summary": "artifacts/recordings/goal-sim2real-model024000/summary.json",
+      "render_info": "artifacts/recordings/goal-sim2real-model024000/render.json",
+      "verification": "artifacts/recordings/goal-sim2real-model024000/verification.json",
+      "publication_proof": "artifacts/recordings/goal-sim2real-model024000/publication.json",
+      "preview": "artifacts/recordings/goal-sim2real-model024000/preview.png",
+      "reproduction_instructions": "artifacts/recordings/goal-sim2real-model024000/README.md",
+      "video": "artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4",
+      "seed": 42,
+      "num_envs": 1,
+      "first_failure_seconds": 193.76,
+      "standard_success_rate": 0.0,
+      "continue_after_failure": true,
+      "post_failure_policy": "continue_actor",
+      "no_reset": true,
+      "no_reference_wrapping": true,
+      "failure_hold_frames": 0,
+      "simulated_transitions": 11283,
+      "recorded_states": 11284,
+      "last_state_seconds": 225.66,
+      "video_duration_seconds": 225.68,
+      "width": 1920,
+      "height": 1080,
+      "fps": 50,
+      "video_frames": 11284,
+      "interpretation": "Complete continued simulation is not complete tracking success. This is the intermediate checkpoint selected at recording time.",
+      "original_recording_checks_passed": 80,
+      "release_metadata_note": "The new checkpoint and recording metadata use repository-relative paths. Tensor and trajectory equivalence is documented separately from the original recording checks.",
+      "rerender_argv": [
+        ".venv/bin/python",
+        "-m",
+        "opensprite_tracker.supermimic.render",
+        "--rollout",
+        "artifacts/recordings/goal-sim2real-model024000/rollout.npz",
+        "--output",
+        "outputs/rerender-goal-sim2real-model024000",
+        "--model",
+        "assets/opensprite/opensprite.xml",
+        "--env-index",
+        "0",
+        "--width",
+        "1920",
+        "--height",
+        "1080",
+        "--fps",
+        "50",
+        "--include-post-failure",
+        "--failure-hold-seconds",
+        "0"
+      ]
+    },
+    {
+      "checkpoint": "artifacts/checkpoints/model_018000.pt",
+      "rollout": "artifacts/recordings/dance-model018000/rollout.npz",
+      "summary": "artifacts/recordings/dance-model018000/summary.json",
+      "render_info": "artifacts/recordings/dance-model018000/render.json",
+      "verification": "artifacts/recordings/dance-model018000/verification.json",
+      "preview": "artifacts/recordings/dance-model018000/preview.png",
+      "reproduction_instructions": "artifacts/recordings/dance-model018000/README.md",
+      "video": "artifacts/videos/dance-model018000-full-1080p50.mp4",
+      "seed": 42,
+      "num_envs": 1,
+      "first_failure_seconds": 193.76,
+      "standard_success_rate": 0.0,
+      "continue_after_failure": true,
+      "post_failure_policy": "continue_actor",
+      "no_reset": true,
+      "no_reference_wrapping": true,
+      "failure_hold_frames": 0,
+      "simulated_transitions": 11283,
+      "recorded_states": 11284,
+      "last_state_seconds": 225.66,
+      "video_duration_seconds": 225.68,
+      "width": 1920,
+      "height": 1080,
+      "fps": 50,
+      "video_frames": 11284,
+      "interpretation": "The full recording includes real post-failure actor/physics behavior. Full simulation does not mean successful tracking; standard scores stop after the first-failure transition.",
+      "release_metadata_note": "Only path metadata was relocated to repository-relative paths. All 78 non-metadata arrays preserve original dtype, shape and values. The render system font is recorded by filename.",
+      "rerender_argv": [
+        ".venv/bin/python",
+        "-m",
+        "opensprite_tracker.supermimic.render",
+        "--rollout",
+        "artifacts/recordings/dance-model018000/rollout.npz",
+        "--output",
+        "outputs/rerender-dance-model018000",
+        "--model",
+        "assets/opensprite/opensprite.xml",
+        "--env-index",
+        "0",
+        "--width",
+        "1920",
+        "--height",
+        "1080",
+        "--fps",
+        "50",
+        "--include-post-failure"
+      ],
+      "training_variant": "goal-sim",
+      "id": "goal-sim-model018000"
+    }
+  ]
 }

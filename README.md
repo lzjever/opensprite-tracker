@@ -8,19 +8,26 @@
 
 ## 视频与模型
 
-**[▶ 完整在线播放：Open sprite robot / umr / supermimic / lafan dance（哔哩哔哩）](https://b23.tv/aMs7Vw3)**
+[![goal-sim2real 24000轮舞蹈预览](docs/media/goal-sim2real-model024000-preview.gif)](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
 
-[![点击前往哔哩哔哩播放完整舞蹈](docs/media/dance-demo-preview.gif)](https://b23.tv/aMs7Vw3)
+最新录像为 **`goal-sim2real / 24000轮`**：[完整MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)、[静态封面](docs/media/goal-sim2real-model024000-poster.png)和[原始仿真轨迹](artifacts/recordings/goal-sim2real-model024000/rollout.npz)。动图节选0–4秒、192–196秒和221–225秒，有跳剪。
 
-点击上方动图可前往哔哩哔哩播放完整视频。动图节选了开头、失败附近和结尾三个片段，有跳剪。[下载原始MP4](artifacts/videos/dance-model018000-full-1080p50.mp4)：1080p、50fps，覆盖全部225.66秒源轨迹。
+录像使用seed42、单实例，在 **193.76秒**首次判失败，之后同一策略继续真实仿真到225.66秒，没有重置、参考循环或停帧。**完整视频不代表整段跟踪成功。** 视频为1080p、50fps，共11284帧；容器时长225.68秒，包含最后一个源状态的显示时长。
 
-| 文件 | 内容 |
-|---|---|
-| [30000轮训练快照](artifacts/checkpoints/model_030000.pt) | 本次发布锁定的中间快照，累计训练约5.86小时，预算为八小时 |
-| [18000轮示例快照](artifacts/checkpoints/model_018000.pt) | 对应示例视频，可用来重新仿真录制 |
-| [示例真实轨迹](artifacts/recordings/dance-model018000/rollout.npz) | 完整状态和动作，可直接重新渲染 |
+| 配方 | 轮次 | 发布内容 |
+|---|---:|---|
+| `goal-sim2real` | 24000 | [对应新录像的快照](artifacts/checkpoints/goal-sim2real_model_024000.pt) |
+| `goal-sim` | 30000 | [保留的训练快照](artifacts/checkpoints/model_030000.pt) |
+| `goal-sim` | 18000 | [快照](artifacts/checkpoints/model_018000.pt)与[原演示视频](artifacts/videos/dance-model018000-full-1080p50.mp4) |
 
-示例在 **193.76秒**首次判失败，之后仍由同一个策略继续真实仿真到结尾，没有重置、参考循环或停帧。完整视频展示了全过程，**不代表整段跟踪成功**。模型版本与视频版本分别标注，不能混用成绩。
+24000轮是首次检查这次录像请求时选定的最新已保存中间快照，不是八小时最终模型。各快照与录像均单独标注配方和轮次。
+
+<details>
+<summary>goal-sim / 18000轮：B站完整在线播放</summary>
+
+[▶ Open sprite robot / umr / supermimic / lafan dance（哔哩哔哩）](https://b23.tv/aMs7Vw3)。这个链接对应原演示，不是上方新录的goal-sim2real视频。
+
+</details>
 
 目前高动态跟踪还不理想。**部分关节在部分时刻已经吃满力矩上限，腾空等动作还是没跟上。** 视频里也能看到世界坐标漂移。实际施加力矩受到effort限幅；未限幅的PD请求大于上限，不等于实际输出超过上限。
 
@@ -44,16 +51,20 @@ uv pip install --python .venv/bin/python -r requirements-lock.txt
 评估发布快照，从第一帧请求完整舞蹈：
 
 ```bash
-.venv/bin/python scripts/demo.py evaluate --output outputs/my-evaluation
+.venv/bin/python scripts/demo.py evaluate \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
+  --output outputs/my-evaluation
 ```
 
 按示例协议重新仿真并录制完整视频，失败后继续运行：
 
 ```bash
-.venv/bin/python scripts/demo.py record --output outputs/my-recording
+.venv/bin/python scripts/demo.py record \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
+  --output outputs/my-recording
 ```
 
-评估默认用30000轮快照、seed42、三个实例；录制默认用18000轮示例快照、seed42、单实例。两者都可用`--checkpoint`指定模型。包装脚本显式使用本仓库的动作和机器人资产，覆盖快照中的历史绝对路径。
+上述命令显式选择新录像对应的快照。CLI默认仍为`goal-sim`：评估用30000轮快照、seed42、三个实例；录制用18000轮快照、seed42、单实例。包装脚本显式使用本仓库的动作和机器人资产，覆盖快照中的历史绝对路径。
 
 从头训练自己的版本：
 
@@ -101,7 +112,7 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 | Critic | `1268→256→128→1` |
 | 成本预测 | 两个256/256隐藏层head，监督真实子步速度、力矩和接触指标 |
 
-上表为`goal-sim`及随仓库发布快照的结构。它的105维Actor观测包含关节位置/速度、IMU角速度和重力方向、上一步动作与6维参考相对姿态；最后一项依赖实际世界heading。
+上表为`goal-sim`的结构。它的105维Actor观测包含关节位置/速度、IMU角速度和重力方向、上一步动作与6维参考相对姿态；最后一项依赖实际世界heading。
 
 | 配方 | Actor输入 | Critic主网络 |
 |---|---|---|
@@ -109,6 +120,8 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 | `goal-sim2real` | 10×99维传感器历史 + 同一770维参考 | 参考编码1024/512/256→latent32；特权特征与latent经1024/512/256→1 |
 
 新配方移除6维参考相对姿态，保留关节位置/速度、IMU gyro/重力投影和前次动作。Actor不读取实际全局位置、世界姿态或线速度；参考目标可离线计算。Critic允许全局特权，与Actor采用相同编码器/解码器宽度、ELU及latent32结构，参数各自独立。WM只用于训练，可用仿真真值。
+
+新配方Actor为3,165,503参数、Critic为2,653,985参数；两种配方的世界模型均为9,498,764参数。
 
 两种配方保持奖励、参考高度误差0.17m及重力平方误差1.6的失败标准。真实机器人仍需可靠的重力估计、传感器标定和IMU外参；`goal-sim2real`尚不代表已验证实机部署。详见[配方对比](docs/plan/goal-sim2real.md)。
 
@@ -135,7 +148,7 @@ uv pip install --python .venv-umr/bin/python -r requirements-umr.txt
 - 短窗WM误差低，不代表H32想象和225秒闭环都可靠。microbatch只切分计算，不增加Adam步数。
 - checkpoint保存模型、Adam、归一化和采样统计；replay、RNG和live simulator状态会重建，恢复不是逐位无损续跑。
 
-后续建议先固定完整源评估基线，再做受控对照。优先检查193秒附近的腾空/落地，校准足部尺度相关奖励，补充临界接触状态的采样覆盖，并验证长rollout误差。机器人侧需要继续做PD、传感器零偏、命令延迟和扭矩—速度能力的实际辨识。这些工作可以直接沿用现有retarget、训练、评估和视频入口。
+后续建议先固定完整源评估基线，再做受控对照。优先检查193秒附近的腾空/落地，校准足部尺度相关奖励，补充临界接触状态的采样覆盖，并验证长rollout误差。机器人侧需要继续做PD、传感器零偏、命令延迟和扭矩—速度能力的实际辨识。这些工作可以直接沿用现有retarget、训练、评估和视频入口。硬件上限的来源、实际限幅与未建模能力见[硬件约束说明](docs/hardware-limits.md)。
 
 ## 方法与许可
 

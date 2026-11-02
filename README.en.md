@@ -8,20 +8,26 @@ The current task is the complete LAFAN dance **`dance2_subject1`**: **11,284 sta
 
 ## Demo and checkpoints
 
-**[▶ Watch the full dance on Bilibili](https://b23.tv/aMs7Vw3)**
+[![goal-sim2real model24000 dance preview](docs/media/goal-sim2real-model024000-preview.gif)](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
 
-[![Watch the full dance on Bilibili](docs/media/dance-demo-preview.gif)](https://b23.tv/aMs7Vw3)
+The new **`goal-sim2real / model24000`** recording is available as a [full MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4), [static poster](docs/media/goal-sim2real-model024000-poster.png), and [saved rollout](artifacts/recordings/goal-sim2real-model024000/rollout.npz). The GIF joins three four-second excerpts: **0–4 s, 192–196 s, and 221–225 s**.
 
-The GIF contains three separate four-second excerpts: **0–4 s, 192–196 s, and 221–225 s**. It is a jump-cut preview. Click it to watch the full video on Bilibili. [Download the original MP4](artifacts/videos/dance-model018000-full-1080p50.mp4) · [Static poster](docs/media/dance-demo-poster.png).
+Seed 42, one robot: first tracking failure occurs at **193.76 s**. The same actor continues real simulation to **225.66 s**, without reset, reference wrapping or failure freeze. **The full video does not mean complete tracking success.** It contains **11,284 frames at 1080p/50 FPS**, with a **225.68 s** container duration because the final recorded state also occupies a video frame.
 
-| Artifact | Status |
-|---|---|
-| [Training snapshot: model30000](artifacts/checkpoints/model_030000.pt) | Selected at 22:53 UTC+08 on 2026-11-01. An intermediate snapshot at 5.86 hours of the eight-hour training budget. **It has not received a full-trajectory evaluation.** |
-| [Example model18000](artifacts/checkpoints/model_018000.pt) and [full video](artifacts/videos/dance-model018000-full-1080p50.mp4) | Seed 42, one robot. First tracking failure at **193.76 s**. The real actor and simulator continue to **225.66 s**, without reset, reference wrapping, action zeroing, or failure freeze. Standard success remains false. |
+| Preset | Iteration | Included artifact |
+|---|---:|---|
+| `goal-sim2real` | 24,000 | [Checkpoint](artifacts/checkpoints/goal-sim2real_model_024000.pt) matching the new recording |
+| `goal-sim` | 30,000 | [Retained training snapshot](artifacts/checkpoints/model_030000.pt) |
+| `goal-sim` | 18,000 | [Checkpoint](artifacts/checkpoints/model_018000.pt) and [earlier video](artifacts/videos/dance-model018000-full-1080p50.mp4) |
 
-These are different checkpoints. The video does not evaluate model30000. Both checkpoints and the saved full rollout are included, so recording and rendering can be reproduced without the developer's local output directory.
+Model24000 was the latest saved checkpoint selected when the recording request was first checked. It is an intermediate snapshot, not the eight-hour final checkpoint or a claim about the currently latest training checkpoint. Checkpoints and recording results are identified separately by preset and iteration.
 
-The video contains all **11,284 frames at 1080p/50 FPS**. Its container duration is **225.68 s**: each recorded state, including the state at 225.66 s, occupies one 20 ms video frame. No failure-hold frames are added. See the [recording verification](artifacts/videos/dance-model018000-verification.json).
+<details>
+<summary>Earlier Bilibili recording: goal-sim / model18000</summary>
+
+[Watch goal-sim / model18000 on Bilibili](https://b23.tv/aMs7Vw3). This link shows the earlier recording, not the new goal-sim2real video.
+
+</details>
 
 ## Method and configuration
 
@@ -30,6 +36,8 @@ UMR uses the included Geno FBX/skinned surface, original BVH, and official Sprit
 Joint axes, masses, inertias, ranges, effort limits, and foot geometry use Sprite's own model. Both waist joints and all three head joints participate.
 
 Training fits a world model to real simulation transitions and differentiates imagined trajectories to train the actor. It uses a SuperMimic-style model-based objective rather than PPO. This is an independent adaptation of the public methods; it does not claim to reproduce the complete official implementation or paper-scale results.
+
+The following architecture table describes **`goal-sim`**; both presets share the simulation and update recipe. Their actor and critic differences follow below.
 
 | Component | Configuration |
 |---|---|
@@ -47,7 +55,7 @@ Training fits a world model to real simulation transitions and differentiates im
 | Validation / precision | **24 WM optimization holdout environments**; normalization still sees all environments. AMP disabled, TF32 enabled. |
 | Actuation | **Torque lag disabled**, τ=0. **Command delay retained**: 0/1 physics tick, hold probability 0.9, refreshed every four ticks. |
 
-The table describes `goal-sim`, the default preset used by the included snapshots. Its 105-dimensional actor observation includes a six-dimensional relative reference orientation that depends on actual world heading. The world model and critic use privileged root state, physical context, and actuator memory during training.
+`goal-sim` remains the default preset. Its 105-dimensional actor observation includes a six-dimensional relative reference orientation that depends on actual world heading. The world model and critic use privileged root state, physical context, and actuator memory during training.
 
 | Preset | Actor input | Critic main network |
 |---|---|---|
@@ -55,6 +63,8 @@ The table describes `goal-sim`, the default preset used by the included snapshot
 | `goal-sim2real` | 10 × 99 sensor observations + the same 770 reference features | Reference encoder 1024/512/256 → latent32; privileged features + latent → decoder 1024/512/256 → 1 |
 
 `goal-sim2real` removes the relative orientation. The actor uses joint position/velocity, IMU gyro and gravity projection, and the previous action. It receives no actual global position, world orientation, or linear velocity; reference features can be computed offline. The privileged critic mirrors the actor's encoder/decoder widths, ELU activations and tanh latent32, with independent weights. The world model is used only in training and may use simulation truth.
+
+The new actor has **3,165,503 parameters**, the critic **2,653,985**, and the unchanged world model **9,498,764**.
 
 Physics, rewards, and failure thresholds remain unchanged: reference height error 0.17 m and squared gravity error 1.6. Real hardware still requires calibrated sensors, IMU extrinsics and reliable gravity estimation. This preset does not establish real-robot readiness. See the [preset comparison](docs/plan/goal-sim2real.md).
 
@@ -74,38 +84,38 @@ uv pip install --python .venv/bin/python -r requirements-lock.txt
 .venv/bin/python scripts/demo.py check
 ```
 
-Evaluation uses MuJoCo Warp/mjlab. Rendering uses the saved rollout and MuJoCo/EGL with FFmpeg. It does not rerun physics. The CPU installation check identifies missing packages, assets, Git LFS pointers, and rendering dependencies.
+Evaluation uses MuJoCo Warp/mjlab. Rendering uses the saved rollout and MuJoCo/EGL with FFmpeg; install `fonts-noto-cjk` for the Chinese HUD on Debian/Ubuntu. It does not rerun physics. The CPU installation check identifies missing packages, assets, Git LFS pointers, and rendering dependencies.
 
 ## Evaluate and record
 
-Evaluate the published 30k snapshot with explicit repository-local motion data:
+Evaluate the new `goal-sim2real / model24000` snapshot:
 
 ```sh
 .venv/bin/python scripts/demo.py evaluate \
-  --checkpoint artifacts/checkpoints/model_030000.pt \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
   --motion data/motions/lafan_dance.npz \
-  --num-envs 3 --seed 42 --output outputs/demo/eval-model030000
+  --num-envs 3 --seed 42 --output outputs/demo/eval-goal-sim2real-model024000
 ```
 
 Standard evaluation requests all 11,283 transitions from the first source frame. It stops early if every instance fails. A truncated diagnostic is not complete-motion success.
 
-Rerun the published 18k recording protocol and render its complete video:
+Rerun its recording protocol and render the complete video:
 
 ```sh
 .venv/bin/python scripts/demo.py record \
-  --checkpoint artifacts/checkpoints/model_018000.pt \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
   --motion data/motions/lafan_dance.npz \
-  --num-envs 1 --seed 42 --output outputs/demo/record-model018000
+  --num-envs 1 --seed 42 --output outputs/demo/record-goal-sim2real-model024000
 ```
 
 `record` uses **`--continue-after-failure`** for real policy simulation and **`--include-post-failure`** for rendering. First failure remains sticky. Standard scores include the first failure transition and exclude later transitions. The HUD labels continued post-failure motion. Numerical differences across hardware or dependency versions may affect reruns.
 
-Each demo command accepts `--dry-run` to show its arguments without GPU execution. Use a new output directory for each experiment. To re-render the [included full rollout](artifacts/recordings/dance-model018000/rollout.npz) without running the actor or physics:
+The CLI defaults remain `goal-sim / model30000` for evaluation and `goal-sim / model18000` for recording. Select the new checkpoint explicitly as above. Each demo command accepts `--dry-run` to show its arguments without GPU execution. Use a new output directory for each experiment. To re-render the [new full rollout](artifacts/recordings/goal-sim2real-model024000/rollout.npz) without running the actor or physics:
 
 ```sh
 .venv/bin/python -m opensprite_tracker.supermimic.render \
-  --rollout artifacts/recordings/dance-model018000/rollout.npz \
-  --model assets/opensprite/opensprite.xml --output outputs/demo/rerender-model018000 \
+  --rollout artifacts/recordings/goal-sim2real-model024000/rollout.npz \
+  --model assets/opensprite/opensprite.xml --output outputs/demo/rerender-goal-sim2real-model024000 \
   --include-post-failure --failure-hold-seconds 0 --width 1920 --height 1080 --fps 50
 ```
 
@@ -152,9 +162,9 @@ Use `data/motions/lafan_dance.npz` to train on the included prepared clip instea
 
 ## Limitations
 
-The recorded 18k policy fails near the jump at 193.7 s. Applied effort reaches saturation and joint overspeed is observed. Raw PD torque requests and clipped applied effort are distinct; a large request does not show an actual effort-limit violation. Global root drift can be substantial even when relative tracking looks plausible.
+The new `goal-sim2real / model24000` recording first fails at 193.76 s. Applied effort saturation, joint overspeed and global drift remain relevant limitations. Raw PD torque requests and clipped applied effort are distinct; a large request does not show an actual effort-limit violation. URDF velocity values inform reference constraints and soft penalties; they do not impose a hard simulation speed cap. See the [hardware-limit audit](docs/hardware-limits.md).
 
-The reference retains `needs_review`: its worst self-penetration is about **4.37 cm**, with **14 frames exceeding 3 cm**. Small WM loss, short-horizon prediction accuracy, a plausible GIF, or a full-length continued video does not establish successful 225-second tracking. The 30k snapshot needs its own full evaluation. No real-robot deployment has been validated.
+The reference retains `needs_review`: its worst self-penetration is about **4.37 cm**, with **14 frames exceeding 3 cm**. Small WM loss, short-horizon prediction accuracy, a plausible GIF, or a full-length continued video does not establish successful 225-second tracking. No real-robot deployment has been validated.
 
 ## Sources and licenses
 

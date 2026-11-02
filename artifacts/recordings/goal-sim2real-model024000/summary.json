@@ -1,0 +1,3291 @@
+{
+  "schema": 1,
+  "training_variant": "goal-sim2real",
+  "observation_contract": {
+    "schema": 1,
+    "training_variant": "goal-sim2real",
+    "actor_observation_schema": "proprio_imu_gravity_v1",
+    "actor_obs_dim": 99,
+    "actor_goal_schema": "reference_local_future77_v1",
+    "critic_architecture": "privileged_goal_encoder_mlp_v1",
+    "critic_uses_privileged_state": true
+  },
+  "checkpoint": "artifacts/checkpoints/goal-sim2real_model_024000.pt",
+  "iteration": 24000,
+  "motion": "data/motions/lafan_dance.npz",
+  "source_files": [
+    "data/motions/lafan_dance.npz"
+  ],
+  "clip": 0,
+  "clip_name": "dance2_subject1",
+  "training_clip_count": 1,
+  "ref_start": 0,
+  "ref_end": 11283,
+  "full_body_collision": true,
+  "model_path": "assets/opensprite/opensprite.xml",
+  "model_path_role": "render mesh asset; full_body_spec supplies whole-body physics when enabled",
+  "git_commit": "4e1319b3c8106a61139275f7622affdab2fcc584",
+  "seed": 42,
+  "num_envs": 1,
+  "policy_hist": 10,
+  "goal_frames": 10,
+  "train_args": {
+    "output": "outputs/train/goal-sim2real-dance",
+    "dataset_revision": "opensprite-umr-geno-v1-20261031",
+    "training_variant": "goal-sim2real",
+    "allow_diagnostic_motion": "False",
+    "resume_runtime_seconds_floor": 0.0,
+    "motion": [
+      "data/motions/lafan_dance.npz"
+    ],
+    "full_body_collision": true,
+    "disable_torque_lag": true,
+    "max_wall_seconds": 28471.949945433065,
+    "save_every_seconds": 600.0,
+    "device": "cuda:0",
+    "seed": 42,
+    "num_envs": 768,
+    "iterations": 320000,
+    "buffer_steps": 1000,
+    "utd": 0.4,
+    "horizon": 32,
+    "goal_frames": 10,
+    "hist": 10,
+    "wm_window": 8,
+    "wm_batches": 4,
+    "wm_batch": 1024,
+    "wm_loss_scale": 1.0,
+    "pi_batch": 512,
+    "wm_width": 2048,
+    "wm_microbatch": 1024,
+    "pi_microbatch": 512,
+    "critic_microbatch": 4096,
+    "critic_storage": "cpu",
+    "replay_device": "cpu",
+    "wm_validation_envs": 24,
+    "wm_validation_every": 50,
+    "wm_validation_batch": 1536,
+    "failure_replay_fraction": 0.0,
+    "failure_replay_lookback_steps": 100,
+    "failure_replay_gap_steps": 10,
+    "coverage_audit": true,
+    "policy_hidden": [
+      1024,
+      512,
+      256
+    ],
+    "lr": 0.0002,
+    "gamma": 0.99,
+    "lam": 0.95,
+    "action_noise": 0.1,
+    "critic_epochs": 5,
+    "critic_minibatches": 4,
+    "warmup_steps": 64,
+    "wm_only_iters": 500,
+    "lr_decay_iters": 250000,
+    "save_every": 1000,
+    "log_every": 10,
+    "amp": "none",
+    "compile": true,
+    "resume": null,
+    "resume_budget_record": null,
+    "world_model_from": null,
+    "reward_profile": "legacy_full",
+    "initialize_from": null,
+    "impact_ramp_updates": 1000,
+    "context_dim": 221,
+    "memory_dim": 66,
+    "reward_config": {
+      "profile": "legacy_full",
+      "body_pos_std": 0.3,
+      "body_ori_std": 0.4,
+      "body_linvel_std": 1.0,
+      "body_angvel_std": 3.14,
+      "root_pos_std": 0.3,
+      "root_ori_std": 0.4,
+      "w_action_rate": -0.1,
+      "w_joint_limit": -10.0,
+      "w_foot_height": -20.0,
+      "w_foot_tilt": -1.0,
+      "w_joint_speed": -1.0,
+      "soft_limit_factor": 0.9,
+      "term_height": 0.17,
+      "term_tilt": 1.6,
+      "w_root_pos": 0.5,
+      "w_root_ori": 0.5,
+      "w_body_pos": 1.0,
+      "w_body_ori": 1.0,
+      "w_body_linvel": 1.0,
+      "w_body_angvel": 1.0,
+      "w_foot_pos": 1.0,
+      "w_foot_linvel": 0.5,
+      "w_swing_clearance": -20.0,
+      "w_leg_joint": 0.35,
+      "w_arm_joint": 0.35,
+      "w_support_share": -2.0,
+      "w_support_stability": 0.4,
+      "w_support_torso": -0.3,
+      "w_motor": -30.0,
+      "w_request": -3.0,
+      "w_impact": -146.14,
+      "foot_pos_std": 0.1,
+      "foot_linvel_std": 0.5,
+      "leg_joint_std": 0.3,
+      "arm_joint_std": 0.35,
+      "ankle_tracking_factor": 0.75,
+      "support_pos_std_scale": 1.5,
+      "support_ori_std_scale": 1.35,
+      "swing_blend_start": 0.015,
+      "swing_blend_end": 0.025,
+      "swing_tolerance": 0.005,
+      "support_contact_full": 0.005,
+      "support_contact_end": 0.02,
+      "flat_rise_full": 0.015,
+      "flat_rise_end": 0.045,
+      "toe_rise_start": 0.04,
+      "toe_rise_full": 0.1,
+      "support_share": 0.6,
+      "minimum_toe_force_n": 5.0,
+      "toe_contact_weight": 0.1,
+      "support_linvel_std": 0.25,
+      "support_angvel_std": 1.0,
+      "support_normal_std": 0.2,
+      "support_height_std": 0.02,
+      "support_torso_deadband": 0.2,
+      "nonfoot_fade_start": 0.02,
+      "nonfoot_fade_end": 0.05,
+      "support_sole_normal_start": 0.0,
+      "support_sole_normal_full": 0.5,
+      "impact_bodyweights": 3.0,
+      "impact_reset_grace_s": 0.2,
+      "include_body_impact": true
+    }
+  },
+  "reward_config": {
+    "profile": "legacy_full",
+    "body_pos_std": 0.3,
+    "body_ori_std": 0.4,
+    "body_linvel_std": 1.0,
+    "body_angvel_std": 3.14,
+    "root_pos_std": 0.3,
+    "root_ori_std": 0.4,
+    "w_action_rate": -0.1,
+    "w_joint_limit": -10.0,
+    "w_foot_height": -20.0,
+    "w_foot_tilt": -1.0,
+    "w_joint_speed": -1.0,
+    "soft_limit_factor": 0.9,
+    "term_height": 0.17,
+    "term_tilt": 1.6,
+    "w_root_pos": 0.5,
+    "w_root_ori": 0.5,
+    "w_body_pos": 1.0,
+    "w_body_ori": 1.0,
+    "w_body_linvel": 1.0,
+    "w_body_angvel": 1.0,
+    "w_foot_pos": 1.0,
+    "w_foot_linvel": 0.5,
+    "w_swing_clearance": -20.0,
+    "w_leg_joint": 0.35,
+    "w_arm_joint": 0.35,
+    "w_support_share": -2.0,
+    "w_support_stability": 0.4,
+    "w_support_torso": -0.3,
+    "w_motor": -30.0,
+    "w_request": -3.0,
+    "w_impact": -146.14,
+    "foot_pos_std": 0.1,
+    "foot_linvel_std": 0.5,
+    "leg_joint_std": 0.3,
+    "arm_joint_std": 0.35,
+    "ankle_tracking_factor": 0.75,
+    "support_pos_std_scale": 1.5,
+    "support_ori_std_scale": 1.35,
+    "swing_blend_start": 0.015,
+    "swing_blend_end": 0.025,
+    "swing_tolerance": 0.005,
+    "support_contact_full": 0.005,
+    "support_contact_end": 0.02,
+    "flat_rise_full": 0.015,
+    "flat_rise_end": 0.045,
+    "toe_rise_start": 0.04,
+    "toe_rise_full": 0.1,
+    "support_share": 0.6,
+    "minimum_toe_force_n": 5.0,
+    "toe_contact_weight": 0.1,
+    "support_linvel_std": 0.25,
+    "support_angvel_std": 1.0,
+    "support_normal_std": 0.2,
+    "support_height_std": 0.02,
+    "support_torso_deadband": 0.2,
+    "nonfoot_fade_start": 0.02,
+    "nonfoot_fade_end": 0.05,
+    "support_sole_normal_start": 0.0,
+    "support_sole_normal_full": 0.5,
+    "impact_bodyweights": 3.0,
+    "impact_reset_grace_s": 0.2,
+    "include_body_impact": true
+  },
+  "reward_config_source": "embedded checkpoint",
+  "reward_profile": "legacy_full",
+  "relative_body_anchor": "waist_yaw_link",
+  "control_dt": 0.02,
+  "expected_transitions": 11283,
+  "requested_transitions": 11283,
+  "executed_transitions": 11283,
+  "complete_clip": true,
+  "complete_clip_interpretation": "simulation reached final source frame; success additionally requires no first failure",
+  "continue_after_failure": true,
+  "post_failure_policy": "continue_actor",
+  "auto_reset": false,
+  "reference_wrapping": false,
+  "no_reset": true,
+  "no_reference_wrapping": true,
+  "stopped_after_all_failed": false,
+  "success_rate": 0.0,
+  "action_noise": false,
+  "sensor_noise": false,
+  "domain_randomization": false,
+  "actuator_delay": "command delay retained; first-order torque lag disabled; seed supplied",
+  "torque_lag_enabled": false,
+  "score_mask": "alive before transition; first failure included, all later samples excluded",
+  "live": "alive after arriving at stored state; final clip completion is not failure",
+  "torque_speed_sampling": "maximum absolute value over four physics substeps (plus endpoint speed)",
+  "contact_sampling": "four physics substeps; normal positive=-sensor force_z",
+  "clearance": "signed official box-sole minimum z above the flat z=0 plane; left,right",
+  "airborne_thresholds": {
+    "clearance_m": 0.002,
+    "contact_peak_n": 10.0
+  },
+  "wall_seconds": 904.8325067833066,
+  "per_env": [
+    {
+      "env": 0,
+      "success": false,
+      "first_failure_frame": 9688,
+      "first_failure_local_frame": 9688,
+      "first_failure_seconds": 193.76,
+      "scored_transitions": 9688,
+      "valid_return": 586.6400146484375,
+      "jump_window_scored_transitions": 101
+    }
+  ],
+  "overall": {
+    "tracking": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 2.4824399948120117,
+      "min": 0.8081510066986084,
+      "max": 4.847898960113525,
+      "p95": 4.577242851257324
+    },
+    "body_pos_error_m": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.04064792022109032,
+      "min": 0.0039164358749985695,
+      "max": 0.19848577678203583,
+      "p95": 0.07962042093276978
+    },
+    "root_pos_error_m": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 2.067187547683716,
+      "min": 0.002335943980142474,
+      "max": 7.753391265869141,
+      "p95": 5.921907424926758
+    },
+    "root_angle_error_rad": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 1.7699775695800781,
+      "min": 0.011876555159687996,
+      "max": 3.1414995193481445,
+      "p95": 3.033938407897949
+    },
+    "foot_height_error_m": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.01765182614326477,
+      "min": 0.000521777430549264,
+      "max": 0.21571791172027588,
+      "p95": 0.06710276007652283
+    },
+    "foot_tilt_error": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.049888357520103455,
+      "min": 1.6904508811421692e-05,
+      "max": 0.6617657542228699,
+      "p95": 0.19612494111061096
+    },
+    "action_rate": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.9279984831809998,
+      "min": 7.121745875338092e-05,
+      "max": 125.96847534179688,
+      "p95": 1.961091160774231
+    },
+    "joint_limit": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.0007207369199022651,
+      "min": 0.0,
+      "max": 0.08775410056114197,
+      "p95": 0.0038865208625793457
+    },
+    "support_confidence": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.671069324016571,
+      "min": 0.0,
+      "max": 1.0,
+      "p95": 1.0
+    },
+    "joint_speed_excess": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.010723457671701908,
+      "min": 0.0,
+      "max": 0.970456600189209,
+      "p95": 0.05397003889083862
+    },
+    "per_reward/motion_global_root_pos": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.06755489856004715,
+      "min": 0.0,
+      "max": 0.4999696910381317,
+      "p95": 0.48092004656791687
+    },
+    "per_reward/motion_global_root_ori": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.07814691215753555,
+      "min": 8.148789669152195e-28,
+      "max": 0.4995594322681427,
+      "p95": 0.4785439074039459
+    },
+    "per_reward/motion_body_pos": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.978064239025116,
+      "min": 0.6454936265945435,
+      "max": 0.9998295903205872,
+      "p95": 0.9957521557807922
+    },
+    "per_reward/motion_body_ori": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.682482123374939,
+      "min": 0.0016127079725265503,
+      "max": 0.9850862622261047,
+      "p95": 0.876918613910675
+    },
+    "per_reward/motion_body_lin_vel": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.44130635261535645,
+      "min": 0.00018394706421531737,
+      "max": 0.9999213814735413,
+      "p95": 0.9818063974380493
+    },
+    "per_reward/motion_body_ang_vel": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.23488570749759674,
+      "min": 3.110158885988312e-08,
+      "max": 0.9998403191566467,
+      "p95": 0.9335718154907227
+    },
+    "per_reward/action_rate_l2": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.09279985725879669,
+      "min": -12.596847534179688,
+      "max": -7.121745966287563e-06,
+      "p95": -0.012156684882938862
+    },
+    "per_reward/joint_limit": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.007207368966192007,
+      "min": -0.8775410056114197,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/motion_foot_tilt": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.049888357520103455,
+      "min": -0.6617657542228699,
+      "max": -1.6904508811421692e-05,
+      "p95": -0.0007601950783282518
+    },
+    "per_reward/motion_foot_pos": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.7595729827880859,
+      "min": 0.001471786410547793,
+      "max": 0.997779905796051,
+      "p95": 0.9772382974624634
+    },
+    "per_reward/motion_foot_lin_vel": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.16818544268608093,
+      "min": 1.2781286727709015e-32,
+      "max": 0.49999967217445374,
+      "p95": 0.49537745118141174
+    },
+    "per_reward/motion_swing_foot_clearance": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.02936171554028988,
+      "min": -1.337172031402588,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/motion_leg_joint_pos": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.2766329348087311,
+      "min": 0.022015510126948357,
+      "max": 0.3476361632347107,
+      "p95": 0.3396690785884857
+    },
+    "per_reward/motion_arm_joint_pos": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.2679014205932617,
+      "min": 0.0002026422880589962,
+      "max": 0.34428635239601135,
+      "p95": 0.32472139596939087
+    },
+    "per_reward/flat_support_foot_stability": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.0019165483536198735,
+      "min": 0.0,
+      "max": 0.13983692228794098,
+      "p95": 0.00651687802746892
+    },
+    "per_reward/support_torso_excess_ang_vel": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.058454349637031555,
+      "min": -7.3598856925964355,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/joint_velocity_limit": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.010723457671701908,
+      "min": -0.970456600189209,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/load_motor_excess": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.5259395837783813,
+      "min": -2.3660998344421387,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/load_request_excess": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.1444198340177536,
+      "min": -6.986382484436035,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/load_contact_excess": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.007316279225051403,
+      "min": -12.067197799682617,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/flat_support_load_share": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": -0.002875354140996933,
+      "min": -0.4382382929325104,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "per_reward/load_body_contact_excess": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.0,
+      "min": -0.0,
+      "max": -0.0,
+      "p95": -0.0
+    },
+    "reward": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.06055326387286186,
+      "min": -0.20974257588386536,
+      "max": 0.1392657607793808,
+      "p95": 0.13043774664402008
+    },
+    "body_pos_world_rmse_m": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 2.0999021530151367,
+      "min": 0.0035998541861772537,
+      "max": 7.724558353424072,
+      "p95": 5.971429824829102
+    },
+    "body_angle_rmse_rad": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.2476896345615387,
+      "min": 0.04903239384293556,
+      "max": 1.0142852067947388,
+      "p95": 0.3906676471233368
+    },
+    "body_linvel_rmse_m_s": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.9755010604858398,
+      "min": 0.008866393007338047,
+      "max": 2.932722806930542,
+      "p95": 1.7899346351623535
+    },
+    "body_angvel_rmse_rad_s": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 5.21212100982666,
+      "min": 0.039682064205408096,
+      "max": 13.05500316619873,
+      "p95": 9.63904857635498
+    },
+    "foot_pos_error_m": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 0.04792751744389534,
+      "min": 0.0015306563582271338,
+      "max": 0.35622143745422363,
+      "p95": 0.1175433099269867
+    },
+    "foot_world_error_m": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 2.0858802795410156,
+      "min": 0.00523760262876749,
+      "max": 8.11726188659668,
+      "p95": 6.040783405303955
+    },
+    "foot_angle_error_rad": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 0.21105250716209412,
+      "min": 0.003890599124133587,
+      "max": 1.3766428232192993,
+      "p95": 0.5207901000976562
+    },
+    "foot_clearance_m": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 0.002444352488964796,
+      "min": -0.009017689153552055,
+      "max": 0.286432683467865,
+      "p95": 0.007752330973744392
+    },
+    "reference_foot_clearance_m": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 0.015973864123225212,
+      "min": 0.0004999777302145958,
+      "max": 0.30287131667137146,
+      "p95": 0.08548959344625473
+    },
+    "foot_clearance_error_m": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": -0.013529512099921703,
+      "min": -0.26357030868530273,
+      "max": 0.02114306576550007,
+      "p95": -0.0008028872543945909
+    },
+    "speed_peak_rad_s": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 1.554868221282959,
+      "min": 0.00013782671885564923,
+      "max": 14.05107307434082,
+      "p95": 4.355475902557373
+    },
+    "speed_ratio": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 0.2808794379234314,
+      "min": 3.6270190321374685e-05,
+      "max": 1.9330741167068481,
+      "p95": 0.8874067664146423
+    },
+    "speed_excess_rad_s": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 0.008586869575083256,
+      "min": 0.0,
+      "max": 3.5456817150115967,
+      "p95": 0.0
+    },
+    "overspeed_joint_fraction": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.023950479924678802,
+      "min": 0.0,
+      "max": 0.25806450843811035,
+      "p95": 0.09677419066429138
+    },
+    "raw_torque_peak_nm": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 2.220526933670044,
+      "min": 0.00016857683658599854,
+      "max": 29.06805419921875,
+      "p95": 8.644562721252441
+    },
+    "applied_torque_peak_nm": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 2.1471853256225586,
+      "min": 0.00016857683658599854,
+      "max": 20.459033966064453,
+      "p95": 8.248627662658691
+    },
+    "raw_torque_ratio": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 0.30860039591789246,
+      "min": 0.00016836229769978672,
+      "max": 3.3100242614746094,
+      "p95": 0.9791114926338196
+    },
+    "applied_torque_ratio": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 0.2971423864364624,
+      "min": 0.00016836229769978672,
+      "max": 1.0,
+      "p95": 0.9791114926338196
+    },
+    "contact_peak_n": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 91.47966766357422,
+      "min": 0.0,
+      "max": 606.4179077148438,
+      "p95": 188.78775024414062
+    },
+    "contact_resultant_peak_n": {
+      "count": 19376,
+      "nonfinite_count": 0,
+      "mean": 94.9077377319336,
+      "min": 0.0,
+      "max": 634.8378295898438,
+      "p95": 192.7054901123047
+    },
+    "both_feet_airborne": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.00030966143822297454,
+      "min": 0.0,
+      "max": 1.0,
+      "p95": 0.0
+    },
+    "body_contact_peak_n": {
+      "count": 9688,
+      "nonfinite_count": 0,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "p95": 0.0
+    },
+    "joint_error_abs_rad": {
+      "count": 300328,
+      "nonfinite_count": 0,
+      "mean": 0.1375804841518402,
+      "min": 1.043081283569336e-07,
+      "max": 1.9770851135253906,
+      "p95": 0.38810235261917114
+    },
+    "per_joint": {
+      "left_hip_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.545974612236023,
+          "min": 0.0009872732916846871,
+          "max": 9.063694953918457,
+          "p95": 4.114257335662842
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.1545974612236023,
+          "min": 9.872733062366024e-05,
+          "max": 0.9063695073127747,
+          "p95": 0.41142570972442627
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.646356105804443,
+          "min": 0.009469502605497837,
+          "max": 22.0750732421875,
+          "p95": 12.0079927444458
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.558327674865723,
+          "min": 0.009469502605497837,
+          "max": 12.0,
+          "p95": 12.0
+        }
+      },
+      "left_hip_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.3112473487854004,
+          "min": 0.00042772904271259904,
+          "max": 7.296807289123535,
+          "p95": 3.5043985843658447
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.13112473487854004,
+          "min": 4.277290281606838e-05,
+          "max": 0.7296807169914246,
+          "p95": 0.3504398465156555
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.702329635620117,
+          "min": 0.055292487144470215,
+          "max": 22.39858055114746,
+          "p95": 12.14001750946045
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.620093822479248,
+          "min": 0.055292487144470215,
+          "max": 12.0,
+          "p95": 12.0
+        }
+      },
+      "left_hip_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.8916208744049072,
+          "min": 0.0012916827108711004,
+          "max": 10.373688697814941,
+          "p95": 4.716601848602295
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.18916210532188416,
+          "min": 0.00012916827108711004,
+          "max": 1.037368893623352,
+          "p95": 0.47166016697883606
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.506840467453003,
+          "min": 0.05182219296693802,
+          "max": 21.55385398864746,
+          "p95": 8.70832347869873
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.494597911834717,
+          "min": 0.05182219296693802,
+          "max": 12.0,
+          "p95": 8.70832347869873
+        }
+      },
+      "left_knee_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.4119338989257812,
+          "min": 0.001200588420033455,
+          "max": 12.313684463500977,
+          "p95": 7.091450214385986
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.24119339883327484,
+          "min": 0.00012005884491372854,
+          "max": 1.2313684225082397,
+          "p95": 0.7091450095176697
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 4.878366947174072,
+          "min": 0.0045990003272891045,
+          "max": 22.572900772094727,
+          "p95": 10.858102798461914
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 4.811459064483643,
+          "min": 0.0045990003272891045,
+          "max": 12.0,
+          "p95": 10.858102798461914
+        }
+      },
+      "left_ankle_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.347822427749634,
+          "min": 0.0005989098572172225,
+          "max": 12.02204418182373,
+          "p95": 6.490056037902832
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.18692854046821594,
+          "min": 4.768390499521047e-05,
+          "max": 0.9571691155433655,
+          "p95": 0.5167242288589478
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.527881622314453,
+          "min": 0.03392105549573898,
+          "max": 18.92526626586914,
+          "p95": 8.834444999694824
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.127023220062256,
+          "min": 0.03392105549573898,
+          "max": 6.0,
+          "p95": 6.0
+        }
+      },
+      "left_ankle_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.9197666645050049,
+          "min": 0.0006416304968297482,
+          "max": 11.253495216369629,
+          "p95": 5.62939453125
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.15284766256809235,
+          "min": 5.108522964292206e-05,
+          "max": 0.8959788680076599,
+          "p95": 0.44820016622543335
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.0870862007141113,
+          "min": 0.021243618801236153,
+          "max": 17.39781379699707,
+          "p95": 7.886990547180176
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.7853844165802,
+          "min": 0.021243618801236153,
+          "max": 6.0,
+          "p95": 6.0
+        }
+      },
+      "right_hip_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.665644645690918,
+          "min": 0.0012306299759075046,
+          "max": 9.67674446105957,
+          "p95": 4.297700881958008
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.166564479470253,
+          "min": 0.0001230630005011335,
+          "max": 0.9676744341850281,
+          "p95": 0.4297700822353363
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.75211238861084,
+          "min": 0.07562780380249023,
+          "max": 21.745634078979492,
+          "p95": 12.318177223205566
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.649474620819092,
+          "min": 0.07562780380249023,
+          "max": 12.0,
+          "p95": 12.0
+        }
+      },
+      "right_hip_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.2409749031066895,
+          "min": 0.0006874055252410471,
+          "max": 7.641558647155762,
+          "p95": 3.1465322971343994
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.12409750372171402,
+          "min": 6.874055543448776e-05,
+          "max": 0.7641558647155762,
+          "p95": 0.3146532475948334
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.538123607635498,
+          "min": 0.045533545315265656,
+          "max": 23.794443130493164,
+          "p95": 11.897578239440918
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.447963237762451,
+          "min": 0.045533545315265656,
+          "max": 12.0,
+          "p95": 11.897578239440918
+        }
+      },
+      "right_hip_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.7554166316986084,
+          "min": 0.0016824038466438651,
+          "max": 11.419503211975098,
+          "p95": 4.441306114196777
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.17554165422916412,
+          "min": 0.00016824038175400347,
+          "max": 1.1419503688812256,
+          "p95": 0.4441305994987488
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.321812391281128,
+          "min": 0.011480212211608887,
+          "max": 22.585350036621094,
+          "p95": 8.021950721740723
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.306865930557251,
+          "min": 0.011480212211608887,
+          "max": 12.0,
+          "p95": 8.021950721740723
+        }
+      },
+      "right_knee_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.616604804992676,
+          "min": 0.0004139783268328756,
+          "max": 13.226204872131348,
+          "p95": 7.714130878448486
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.26166048645973206,
+          "min": 4.1397834138479084e-05,
+          "max": 1.3226205110549927,
+          "p95": 0.7714130878448486
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 5.113833427429199,
+          "min": 0.0040042465552687645,
+          "max": 29.06805419921875,
+          "p95": 11.306679725646973
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 4.995602607727051,
+          "min": 0.0040042465552687645,
+          "max": 12.0,
+          "p95": 11.306679725646973
+        }
+      },
+      "right_ankle_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.553419351577759,
+          "min": 0.0010254919761791825,
+          "max": 14.05107307434082,
+          "p95": 7.059342384338379
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.2032977044582367,
+          "min": 8.164744940586388e-05,
+          "max": 1.1187160015106201,
+          "p95": 0.5620495080947876
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.746892213821411,
+          "min": 0.03118622675538063,
+          "max": 19.860145568847656,
+          "p95": 9.475464820861816
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.2528698444366455,
+          "min": 0.03118622675538063,
+          "max": 6.0,
+          "p95": 6.0
+        }
+      },
+      "right_ankle_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.0123956203460693,
+          "min": 0.0005144742899574339,
+          "max": 10.808252334594727,
+          "p95": 5.651158332824707
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.1602226048707962,
+          "min": 4.096132761333138e-05,
+          "max": 0.8605296015739441,
+          "p95": 0.4499329626560211
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.255908489227295,
+          "min": 0.01538550853729248,
+          "max": 18.495216369628906,
+          "p95": 8.043999671936035
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.8987486362457275,
+          "min": 0.01538550853729248,
+          "max": 6.0,
+          "p95": 6.0
+        }
+      },
+      "waist_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.2877718210220337,
+          "min": 0.0007290366920642555,
+          "max": 5.715663433074951,
+          "p95": 3.1797878742218018
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.3388873338699341,
+          "min": 0.00019185176643077284,
+          "max": 1.504122018814087,
+          "p95": 0.8367862701416016
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.808753490447998,
+          "min": 0.0050508687272667885,
+          "max": 20.459033966064453,
+          "p95": 9.497015953063965
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 3.808753490447998,
+          "min": 0.0050508687272667885,
+          "max": 20.459033966064453,
+          "p95": 9.497015953063965
+        }
+      },
+      "waist_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.5328351259231567,
+          "min": 0.0026539163663983345,
+          "max": 5.3056721687316895,
+          "p95": 3.6856870651245117
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.4033776521682739,
+          "min": 0.000698399031534791,
+          "max": 1.3962295055389404,
+          "p95": 0.9699176549911499
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.5377883911132812,
+          "min": 0.003224065061658621,
+          "max": 11.450335502624512,
+          "p95": 6.227668285369873
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.5377883911132812,
+          "min": 0.003224065061658621,
+          "max": 11.450335502624512,
+          "p95": 6.227668285369873
+        }
+      },
+      "left_shoulder_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.0337607860565186,
+          "min": 0.005687720142304897,
+          "max": 7.345681667327881,
+          "p95": 4.1150665283203125
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5352001786231995,
+          "min": 0.0014967684401199222,
+          "max": 1.9330741167068481,
+          "p95": 1.0829122066497803
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.7469691038131714,
+          "min": 0.009617879986763,
+          "max": 5.376951217651367,
+          "p95": 3.506204605102539
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.6834067106246948,
+          "min": 0.009617879986763,
+          "max": 3.0,
+          "p95": 3.0
+        }
+      },
+      "left_shoulder_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.1624362468719482,
+          "min": 0.003660038812085986,
+          "max": 5.103054046630859,
+          "p95": 3.2698798179626465
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.3059042990207672,
+          "min": 0.0009631681023165584,
+          "max": 1.3429089784622192,
+          "p95": 0.8604946732521057
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.381209373474121,
+          "min": 0.01597602665424347,
+          "max": 5.765105724334717,
+          "p95": 3.13008451461792
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.350698709487915,
+          "min": 0.01597602665424347,
+          "max": 3.0,
+          "p95": 3.0
+        }
+      },
+      "left_shoulder_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.082556962966919,
+          "min": 0.0007946645491756499,
+          "max": 5.2994818687438965,
+          "p95": 4.061645030975342
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5480413436889648,
+          "min": 0.00020912225591018796,
+          "max": 1.394600510597229,
+          "p95": 1.0688540935516357
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5468441843986511,
+          "min": 0.0078753512352705,
+          "max": 2.8557565212249756,
+          "p95": 1.3308683633804321
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5468441843986511,
+          "min": 0.0078753512352705,
+          "max": 2.8557565212249756,
+          "p95": 1.3308683633804321
+        }
+      },
+      "left_elbow_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.0210695266723633,
+          "min": 0.0008188383071683347,
+          "max": 5.292984962463379,
+          "p95": 4.027420997619629
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5318604707717896,
+          "min": 0.0002154837711714208,
+          "max": 1.3928908109664917,
+          "p95": 1.0598475933074951
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.741669774055481,
+          "min": 0.005793154239654541,
+          "max": 2.9356751441955566,
+          "p95": 1.617600440979004
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.741669774055481,
+          "min": 0.005793154239654541,
+          "max": 2.9356751441955566,
+          "p95": 1.617600440979004
+        }
+      },
+      "left_wrist_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.5461132526397705,
+          "min": 0.00147637736517936,
+          "max": 5.256038188934326,
+          "p95": 3.660799503326416
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.4068719148635864,
+          "min": 0.0003885203623212874,
+          "max": 1.3831679821014404,
+          "p95": 0.96336829662323
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.21315446496009827,
+          "min": 0.0016285330057144165,
+          "max": 1.5311075448989868,
+          "p95": 0.5239695310592651
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.21315446496009827,
+          "min": 0.0016285330057144165,
+          "max": 1.5311075448989868,
+          "p95": 0.5239695310592651
+        }
+      },
+      "left_wrist_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.2160358428955078,
+          "min": 0.0012735961936414242,
+          "max": 4.3069868087768555,
+          "p95": 3.103694200515747
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.32000941038131714,
+          "min": 0.00033515688846819103,
+          "max": 1.1334176063537598,
+          "p95": 0.8167616724967957
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.11039068549871445,
+          "min": 0.0013066567480564117,
+          "max": 0.5586351156234741,
+          "p95": 0.2756431996822357
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.11039068549871445,
+          "min": 0.0013066567480564117,
+          "max": 0.5586351156234741,
+          "p95": 0.2756431996822357
+        }
+      },
+      "left_wrist_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.13208143413066864,
+          "min": 0.00037127602263353765,
+          "max": 3.643343687057495,
+          "p95": 0.316251277923584
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.034758273512125015,
+          "min": 9.770421456778422e-05,
+          "max": 0.9587746858596802,
+          "p95": 0.08322402089834213
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.027067137882113457,
+          "min": 0.00041525717824697495,
+          "max": 0.5994502902030945,
+          "p95": 0.06270335614681244
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.027067137882113457,
+          "min": 0.00041525717824697495,
+          "max": 0.5994502902030945,
+          "p95": 0.06270335614681244
+        }
+      },
+      "right_shoulder_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.856871485710144,
+          "min": 0.007813752628862858,
+          "max": 5.651510715484619,
+          "p95": 3.893399715423584
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.488650381565094,
+          "min": 0.0020562508143484592,
+          "max": 1.4872397184371948,
+          "p95": 1.0245789289474487
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.3563613891601562,
+          "min": 0.01087673008441925,
+          "max": 5.605185508728027,
+          "p95": 3.0547094345092773
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.3323818445205688,
+          "min": 0.01087673008441925,
+          "max": 3.0,
+          "p95": 3.0
+        }
+      },
+      "right_shoulder_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.2565587759017944,
+          "min": 0.0065820361487567425,
+          "max": 5.03782844543457,
+          "p95": 3.299891233444214
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.33067336678504944,
+          "min": 0.0017321148188784719,
+          "max": 1.325744390487671,
+          "p95": 0.8683924078941345
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.4167394638061523,
+          "min": 0.009257800877094269,
+          "max": 4.8902268409729,
+          "p95": 3.16792368888855
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.3905894756317139,
+          "min": 0.009257800877094269,
+          "max": 3.0,
+          "p95": 3.0
+        }
+      },
+      "right_shoulder_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 2.1235218048095703,
+          "min": 0.0032050618901848793,
+          "max": 6.887754917144775,
+          "p95": 4.100417137145996
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5588214993476868,
+          "min": 0.0008434373303316534,
+          "max": 1.812567114830017,
+          "p95": 1.079057216644287
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.519191324710846,
+          "min": 0.007519565522670746,
+          "max": 3.089448928833008,
+          "p95": 1.2449777126312256
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5191820859909058,
+          "min": 0.007519565522670746,
+          "max": 3.0,
+          "p95": 1.2449777126312256
+        }
+      },
+      "right_elbow_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.9742662906646729,
+          "min": 0.0006651431322097778,
+          "max": 5.53447961807251,
+          "p95": 3.981250762939453
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.5195437669754028,
+          "min": 0.000175037668668665,
+          "max": 1.4564419984817505,
+          "p95": 1.0476975440979004
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.6968052983283997,
+          "min": 0.011371225118637085,
+          "max": 3.2709176540374756,
+          "p95": 1.6519787311553955
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.696715772151947,
+          "min": 0.011371225118637085,
+          "max": 3.0,
+          "p95": 1.6519787311553955
+        }
+      },
+      "right_wrist_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.5531524419784546,
+          "min": 0.00036082000588066876,
+          "max": 7.328051567077637,
+          "p95": 3.7112746238708496
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.408724308013916,
+          "min": 9.495263657299802e-05,
+          "max": 1.9284346103668213,
+          "p95": 0.9766511917114258
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.21205516159534454,
+          "min": 0.0019955597817897797,
+          "max": 1.455207109451294,
+          "p95": 0.5186008810997009
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.21205516159534454,
+          "min": 0.0019955597817897797,
+          "max": 1.455207109451294,
+          "p95": 0.5186008810997009
+        }
+      },
+      "right_wrist_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 1.065150499343872,
+          "min": 0.0012504628393799067,
+          "max": 5.005226135253906,
+          "p95": 3.229221820831299
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.2803027629852295,
+          "min": 0.0003290691820438951,
+          "max": 1.3171647787094116,
+          "p95": 0.8497952818870544
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.09372125566005707,
+          "min": 0.00036757998168468475,
+          "max": 0.577363133430481,
+          "p95": 0.2663579285144806
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.09372125566005707,
+          "min": 0.00036757998168468475,
+          "max": 0.577363133430481,
+          "p95": 0.2663579285144806
+        }
+      },
+      "right_wrist_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.3242041766643524,
+          "min": 0.00013782671885564923,
+          "max": 3.412738561630249,
+          "p95": 1.0348615646362305
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.08531689643859863,
+          "min": 3.6270190321374685e-05,
+          "max": 0.8980891108512878,
+          "p95": 0.27233201265335083
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.0417255163192749,
+          "min": 0.00016857683658599854,
+          "max": 0.594569206237793,
+          "p95": 0.11198244988918304
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.0417255163192749,
+          "min": 0.00016857683658599854,
+          "max": 0.594569206237793,
+          "p95": 0.11198244988918304
+        }
+      },
+      "head_pitch_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.6829198002815247,
+          "min": 0.0011488206218928099,
+          "max": 3.894104480743408,
+          "p95": 2.0420000553131104
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.17971575260162354,
+          "min": 0.00030232121935114264,
+          "max": 1.0247642993927002,
+          "p95": 0.5373684167861938
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.12696006894111633,
+          "min": 0.0005867499858140945,
+          "max": 0.9853807687759399,
+          "p95": 0.3315619230270386
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.12680752575397491,
+          "min": 0.0005867499858140945,
+          "max": 0.800000011920929,
+          "p95": 0.3315619230270386
+        }
+      },
+      "head_roll_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.21643182635307312,
+          "min": 0.001135626225732267,
+          "max": 1.5883831977844238,
+          "p95": 0.553581714630127
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.056955736130476,
+          "min": 0.0002988490159623325,
+          "max": 0.4179955720901489,
+          "p95": 0.14567939937114716
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.08464378863573074,
+          "min": 0.0003768021706491709,
+          "max": 0.7495131492614746,
+          "p95": 0.2921963334083557
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.08464378863573074,
+          "min": 0.0003768021706491709,
+          "max": 0.7495131492614746,
+          "p95": 0.2921963334083557
+        }
+      },
+      "head_yaw_joint": {
+        "speed_peak_rad_s": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.8603568077087402,
+          "min": 0.0017745010554790497,
+          "max": 3.8886444568634033,
+          "p95": 2.338920831680298
+        },
+        "speed_ratio": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.2264097034931183,
+          "min": 0.0004669739573728293,
+          "max": 1.0233274698257446,
+          "p95": 0.6155054569244385
+        },
+        "raw_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.09674049913883209,
+          "min": 0.00027492083609104156,
+          "max": 0.6977109909057617,
+          "p95": 0.25235071778297424
+        },
+        "applied_torque_peak_nm": {
+          "count": 9688,
+          "nonfinite_count": 0,
+          "mean": 0.09674049913883209,
+          "min": 0.00027492083609104156,
+          "max": 0.6977109909057617,
+          "p95": 0.25235071778297424
+        }
+      }
+    }
+  },
+  "jump_32_34s": {
+    "interpretation": "fixed clip-local time window; no jump annotation implied for other motions",
+    "expected_transitions_per_env": 101,
+    "scored_transitions": 101,
+    "coverage": 1.0,
+    "metrics": {
+      "tracking": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 2.708216905593872,
+        "min": 1.239833116531372,
+        "max": 3.927943706512451,
+        "p95": 3.8560731410980225
+      },
+      "body_pos_error_m": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.07030647248029709,
+        "min": 0.021274806931614876,
+        "max": 0.14605973660945892,
+        "p95": 0.138747438788414
+      },
+      "root_pos_error_m": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 1.0101286172866821,
+        "min": 0.9405081868171692,
+        "max": 1.1454463005065918,
+        "p95": 1.1116218566894531
+      },
+      "root_angle_error_rad": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.46811115741729736,
+        "min": 0.2585827708244324,
+        "max": 0.644421398639679,
+        "p95": 0.6110951900482178
+      },
+      "foot_height_error_m": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.013986477628350258,
+        "min": 0.0008771420689299703,
+        "max": 0.06623711436986923,
+        "p95": 0.05828075855970383
+      },
+      "foot_tilt_error": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.10110507905483246,
+        "min": 0.0008035696810111403,
+        "max": 0.4488440155982971,
+        "p95": 0.3705432116985321
+      },
+      "action_rate": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 1.0186337232589722,
+        "min": 0.04863590747117996,
+        "max": 2.73417067527771,
+        "p95": 1.8924999237060547
+      },
+      "joint_limit": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.0007441614870913327,
+        "min": 0.0,
+        "max": 0.03407922759652138,
+        "p95": 0.00029528141021728516
+      },
+      "support_confidence": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.5793087482452393,
+        "min": 0.0,
+        "max": 1.0,
+        "p95": 1.0
+      },
+      "joint_speed_excess": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.009637454524636269,
+        "min": 0.0,
+        "max": 0.1198725551366806,
+        "p95": 0.06782899051904678
+      },
+      "per_reward/motion_global_root_pos": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 2.4149234377546236e-05,
+        "min": 2.7931844215345336e-07,
+        "max": 0.00028507551178336143,
+        "p95": 0.00011656931019388139
+      },
+      "per_reward/motion_global_root_ori": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.14446207880973816,
+        "min": 0.04366970434784889,
+        "max": 0.331725537776947,
+        "p95": 0.32379379868507385
+      },
+      "per_reward/motion_body_pos": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.9329546093940735,
+        "min": 0.7889610528945923,
+        "max": 0.9949835538864136,
+        "p95": 0.9932944774627686
+      },
+      "per_reward/motion_body_ori": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.5602575540542603,
+        "min": 0.009171790443360806,
+        "max": 0.8791321516036987,
+        "p95": 0.87515789270401
+      },
+      "per_reward/motion_body_lin_vel": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.5919727087020874,
+        "min": 0.23615066707134247,
+        "max": 0.9657392501831055,
+        "p95": 0.9399574398994446
+      },
+      "per_reward/motion_body_ang_vel": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.4785458445549011,
+        "min": 0.07574879378080368,
+        "max": 0.9475645422935486,
+        "p95": 0.9228488206863403
+      },
+      "per_reward/action_rate_l2": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.10186336934566498,
+        "min": -0.27341708540916443,
+        "max": -0.004863590933382511,
+        "p95": -0.01176547072827816
+      },
+      "per_reward/joint_limit": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.007441615220159292,
+        "min": -0.3407922685146332,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/motion_foot_tilt": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.10110507905483246,
+        "min": -0.4488440155982971,
+        "max": -0.0008035696810111403,
+        "p95": -0.003956363536417484
+      },
+      "per_reward/motion_foot_pos": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.4910861551761627,
+        "min": 0.05144154280424118,
+        "max": 0.9810351133346558,
+        "p95": 0.956037163734436
+      },
+      "per_reward/motion_foot_lin_vel": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.10218910872936249,
+        "min": 3.2131578109328984e-07,
+        "max": 0.49639594554901123,
+        "p95": 0.49261993169784546
+      },
+      "per_reward/motion_swing_foot_clearance": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.01354052685201168,
+        "min": -0.15641479194164276,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/motion_leg_joint_pos": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.2484290599822998,
+        "min": 0.11367388069629669,
+        "max": 0.3304196894168854,
+        "p95": 0.3261372745037079
+      },
+      "per_reward/motion_arm_joint_pos": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.23911139369010925,
+        "min": 0.047231607139110565,
+        "max": 0.3314047157764435,
+        "p95": 0.3283969759941101
+      },
+      "per_reward/flat_support_foot_stability": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.0002797630149871111,
+        "min": 0.0,
+        "max": 0.010465688072144985,
+        "p95": 5.132560090714833e-06
+      },
+      "per_reward/support_torso_excess_ang_vel": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.008012969046831131,
+        "min": -0.16759330034255981,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/joint_velocity_limit": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.009637454524636269,
+        "min": -0.1198725551366806,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/load_motor_excess": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.8287650942802429,
+        "min": -2.3574635982513428,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/load_request_excess": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.3101746141910553,
+        "min": -4.144690036773682,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/load_contact_excess": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.011570538394153118,
+        "min": -0.6832721829414368,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/flat_support_load_share": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": -0.012626132927834988,
+        "min": -0.27717363834381104,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "per_reward/load_body_contact_excess": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.0,
+        "min": -0.0,
+        "max": -0.0,
+        "p95": 0.0
+      },
+      "reward": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.047691505402326584,
+        "min": -0.05984477326273918,
+        "max": 0.11164485663175583,
+        "p95": 0.10739688575267792
+      },
+      "body_pos_world_rmse_m": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 1.010491132736206,
+        "min": 0.9231570959091187,
+        "max": 1.1473430395126343,
+        "p95": 1.1172765493392944
+      },
+      "body_angle_rmse_rad": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.32991737127304077,
+        "min": 0.1435660719871521,
+        "max": 0.8664061427116394,
+        "p95": 0.7835944294929504
+      },
+      "body_linvel_rmse_m_s": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.7218713760375977,
+        "min": 0.18671199679374695,
+        "max": 1.2013680934906006,
+        "p95": 1.1403619050979614
+      },
+      "body_angvel_rmse_rad_s": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 2.791200637817383,
+        "min": 0.7287251353263855,
+        "max": 5.043911933898926,
+        "p95": 4.718826770782471
+      },
+      "foot_pos_error_m": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 0.08246082812547684,
+        "min": 0.004494727123528719,
+        "max": 0.1856623888015747,
+        "p95": 0.16942717134952545
+      },
+      "foot_world_error_m": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 1.0184061527252197,
+        "min": 0.8630462288856506,
+        "max": 1.1777671575546265,
+        "p95": 1.139969825744629
+      },
+      "foot_angle_error_rad": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 0.2817128300666809,
+        "min": 0.03750667721033096,
+        "max": 1.0537493228912354,
+        "p95": 0.7765592932701111
+      },
+      "foot_clearance_m": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 0.0012663195375353098,
+        "min": -0.00562666729092598,
+        "max": 0.022932002320885658,
+        "p95": 0.01140280906111002
+      },
+      "reference_foot_clearance_m": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 0.01082189567387104,
+        "min": 0.0005000270903110504,
+        "max": 0.10991302132606506,
+        "p95": 0.04266628250479698
+      },
+      "foot_clearance_error_m": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": -0.0095555754378438,
+        "min": -0.09343494474887848,
+        "max": 0.02114306576550007,
+        "p95": 0.00333170173689723
+      },
+      "speed_peak_rad_s": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 1.7758363485336304,
+        "min": 0.006520520430058241,
+        "max": 9.41050910949707,
+        "p95": 5.285426139831543
+      },
+      "speed_ratio": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 0.2901427745819092,
+        "min": 0.0017159264534711838,
+        "max": 1.2934925556182861,
+        "p95": 0.7918073534965515
+      },
+      "speed_excess_rad_s": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 0.006441818084567785,
+        "min": 0.0,
+        "max": 1.115271806716919,
+        "p95": 0.0
+      },
+      "overspeed_joint_fraction": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.015649951994419098,
+        "min": 0.0,
+        "max": 0.09677419066429138,
+        "p95": 0.06451612710952759
+      },
+      "raw_torque_peak_nm": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 2.7891523838043213,
+        "min": 0.0015580710023641586,
+        "max": 22.585350036621094,
+        "p95": 10.866167068481445
+      },
+      "applied_torque_peak_nm": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 2.63706374168396,
+        "min": 0.0015580710023641586,
+        "max": 13.88046932220459,
+        "p95": 10.531841278076172
+      },
+      "raw_torque_ratio": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 0.3622235059738159,
+        "min": 0.0015757456421852112,
+        "max": 2.919236421585083,
+        "p95": 1.1490178108215332
+      },
+      "applied_torque_ratio": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 0.3407289385795593,
+        "min": 0.0015757456421852112,
+        "max": 1.0,
+        "p95": 1.0
+      },
+      "contact_peak_n": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 93.10627746582031,
+        "min": 0.0,
+        "max": 472.8864440917969,
+        "p95": 197.34779357910156
+      },
+      "contact_resultant_peak_n": {
+        "count": 202,
+        "nonfinite_count": 0,
+        "mean": 97.8241195678711,
+        "min": 0.0,
+        "max": 515.38037109375,
+        "p95": 197.38401794433594
+      },
+      "both_feet_airborne": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p95": 0.0
+      },
+      "body_contact_peak_n": {
+        "count": 101,
+        "nonfinite_count": 0,
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p95": 0.0
+      },
+      "joint_error_abs_rad": {
+        "count": 3131,
+        "nonfinite_count": 0,
+        "mean": 0.15992723405361176,
+        "min": 9.256601333618164e-05,
+        "max": 1.4010388851165771,
+        "p95": 0.43406638503074646
+      },
+      "per_joint": {
+        "left_hip_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.7933549880981445,
+            "min": 0.05489882454276085,
+            "max": 7.5514702796936035,
+            "p95": 6.689521789550781
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.27933546900749207,
+            "min": 0.005489882547408342,
+            "max": 0.7551470398902893,
+            "p95": 0.6689521670341492
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 8.022672653198242,
+            "min": 2.260162830352783,
+            "max": 17.509599685668945,
+            "p95": 13.387002944946289
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 7.782701015472412,
+            "min": 2.260162830352783,
+            "max": 12.0,
+            "p95": 12.0
+          }
+        },
+        "left_hip_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.8289802074432373,
+            "min": 0.18753160536289215,
+            "max": 5.587352752685547,
+            "p95": 4.6552557945251465
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.18289801478385925,
+            "min": 0.018753159791231155,
+            "max": 0.5587352514266968,
+            "p95": 0.4655255675315857
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 7.01831579208374,
+            "min": 1.0044353008270264,
+            "max": 15.810702323913574,
+            "p95": 12.403229713439941
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 6.917146682739258,
+            "min": 1.0044353008270264,
+            "max": 12.0,
+            "p95": 12.0
+          }
+        },
+        "left_hip_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.1889264583587646,
+            "min": 0.062365658581256866,
+            "max": 8.631875038146973,
+            "p95": 4.186821937561035
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.2188926786184311,
+            "min": 0.006236565764993429,
+            "max": 0.8631874918937683,
+            "p95": 0.41868218779563904
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 4.03941535949707,
+            "min": 0.2404056042432785,
+            "max": 14.455368041992188,
+            "p95": 10.483277320861816
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.974372386932373,
+            "min": 0.2404056042432785,
+            "max": 12.0,
+            "p95": 10.483277320861816
+          }
+        },
+        "left_knee_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.5285089015960693,
+            "min": 0.03449935093522072,
+            "max": 9.384875297546387,
+            "p95": 8.515022277832031
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3528509736061096,
+            "min": 0.0034499350003898144,
+            "max": 0.9384875297546387,
+            "p95": 0.8515022397041321
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 5.855414390563965,
+            "min": 0.7249780893325806,
+            "max": 15.419092178344727,
+            "p95": 11.962078094482422
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 5.7356743812561035,
+            "min": 0.7249780893325806,
+            "max": 12.0,
+            "p95": 11.962078094482422
+          }
+        },
+        "left_ankle_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.408205509185791,
+            "min": 0.12367304414510727,
+            "max": 8.164566993713379,
+            "p95": 7.484521389007568
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.27135393023490906,
+            "min": 0.009846579283475876,
+            "max": 0.6500450968742371,
+            "p95": 0.595901370048523
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 5.001950740814209,
+            "min": 0.0397341251373291,
+            "max": 16.79043197631836,
+            "p95": 11.026981353759766
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 4.01775598526001,
+            "min": 0.0397341251373291,
+            "max": 6.0,
+            "p95": 6.0
+          }
+        },
+        "left_ankle_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.4436633586883545,
+            "min": 0.07061521708965302,
+            "max": 6.5183000564575195,
+            "p95": 5.764658451080322
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.19455917179584503,
+            "min": 0.0056222304701805115,
+            "max": 0.5189729332923889,
+            "p95": 0.4589695930480957
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.95888352394104,
+            "min": 0.11819270253181458,
+            "max": 12.056516647338867,
+            "p95": 9.083381652832031
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.409477949142456,
+            "min": 0.11819270253181458,
+            "max": 6.0,
+            "p95": 6.0
+          }
+        },
+        "right_hip_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.6302073001861572,
+            "min": 0.05021737515926361,
+            "max": 8.262256622314453,
+            "p95": 6.278265953063965
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.26302066445350647,
+            "min": 0.005021737422794104,
+            "max": 0.8262256383895874,
+            "p95": 0.6278265714645386
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 9.270968437194824,
+            "min": 1.0674653053283691,
+            "max": 16.65308380126953,
+            "p95": 15.712947845458984
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 8.607483863830566,
+            "min": 1.0674653053283691,
+            "max": 12.0,
+            "p95": 12.0
+          }
+        },
+        "right_hip_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.8122377395629883,
+            "min": 0.290902316570282,
+            "max": 4.612626552581787,
+            "p95": 3.8432023525238037
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1812237650156021,
+            "min": 0.02909023128449917,
+            "max": 0.46126264333724976,
+            "p95": 0.3843202292919159
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 7.514042854309082,
+            "min": 1.217409610748291,
+            "max": 13.998453140258789,
+            "p95": 12.258655548095703
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 7.449317932128906,
+            "min": 1.217409610748291,
+            "max": 12.0,
+            "p95": 12.0
+          }
+        },
+        "right_hip_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.7723027467727661,
+            "min": 0.06847034394741058,
+            "max": 4.782187461853027,
+            "p95": 4.331900119781494
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.17723025381565094,
+            "min": 0.006847034208476543,
+            "max": 0.4782187342643738,
+            "p95": 0.4331900179386139
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 5.143091678619385,
+            "min": 0.13510605692863464,
+            "max": 22.585350036621094,
+            "p95": 16.099952697753906
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 4.651496410369873,
+            "min": 0.13510605692863464,
+            "max": 12.0,
+            "p95": 12.0
+          }
+        },
+        "right_knee_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.701573133468628,
+            "min": 0.1250184029340744,
+            "max": 9.354523658752441,
+            "p95": 7.447760105133057
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3701573610305786,
+            "min": 0.012501840479671955,
+            "max": 0.9354523420333862,
+            "p95": 0.7447760105133057
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 6.6960062980651855,
+            "min": 0.4118295907974243,
+            "max": 15.466777801513672,
+            "p95": 10.900860786437988
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 6.6557111740112305,
+            "min": 0.4118295907974243,
+            "max": 12.0,
+            "p95": 10.900860786437988
+          }
+        },
+        "right_ankle_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.4124345779418945,
+            "min": 0.08407311886548996,
+            "max": 9.41050910949707,
+            "p95": 7.95828104019165
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.2716906666755676,
+            "min": 0.006693719420582056,
+            "max": 0.7492443323135376,
+            "p95": 0.633621096611023
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 4.203622341156006,
+            "min": 0.1253846287727356,
+            "max": 17.515419006347656,
+            "p95": 9.723650932312012
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.54699444770813,
+            "min": 0.1253846287727356,
+            "max": 6.0,
+            "p95": 6.0
+          }
+        },
+        "right_ankle_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.6552584171295166,
+            "min": 0.0685410350561142,
+            "max": 8.562814712524414,
+            "p95": 6.235947608947754
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.211405947804451,
+            "min": 0.005457088816910982,
+            "max": 0.6817527413368225,
+            "p95": 0.4964926242828369
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 4.1614089012146,
+            "min": 0.6125463247299194,
+            "max": 11.487470626831055,
+            "p95": 8.707391738891602
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.599175453186035,
+            "min": 0.6125463247299194,
+            "max": 6.0,
+            "p95": 6.0
+          }
+        },
+        "waist_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.3441333770751953,
+            "min": 0.07437840104103088,
+            "max": 3.573730945587158,
+            "p95": 2.9403512477874756
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3537193536758423,
+            "min": 0.019573263823986053,
+            "max": 0.9404554963111877,
+            "p95": 0.773776650428772
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.5912578105926514,
+            "min": 0.07072179019451141,
+            "max": 13.88046932220459,
+            "p95": 9.087316513061523
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 3.5912578105926514,
+            "min": 0.07072179019451141,
+            "max": 13.88046932220459,
+            "p95": 9.087316513061523
+          }
+        },
+        "waist_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.9023516178131104,
+            "min": 0.11286969482898712,
+            "max": 4.47817850112915,
+            "p95": 3.8925282955169678
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.5006188750267029,
+            "min": 0.029702551662921906,
+            "max": 1.1784679889678955,
+            "p95": 1.024349570274353
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.918991804122925,
+            "min": 0.218196302652359,
+            "max": 7.669983386993408,
+            "p95": 6.583139419555664
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.918991804122925,
+            "min": 0.218196302652359,
+            "max": 7.669983386993408,
+            "p95": 6.583139419555664
+          }
+        },
+        "left_shoulder_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.214702844619751,
+            "min": 0.057249631732702255,
+            "max": 4.915271759033203,
+            "p95": 3.99320387840271
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.5828165411949158,
+            "min": 0.015065692365169525,
+            "max": 1.2934925556182861,
+            "p95": 1.0508431196212769
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.4333014488220215,
+            "min": 0.07502023130655289,
+            "max": 4.156135082244873,
+            "p95": 3.293933153152466
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.3920482397079468,
+            "min": 0.07502023130655289,
+            "max": 3.0,
+            "p95": 3.0
+          }
+        },
+        "left_shoulder_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.0663504600524902,
+            "min": 0.051273372024297714,
+            "max": 3.413503885269165,
+            "p95": 2.7059762477874756
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.2806185483932495,
+            "min": 0.013492993079125881,
+            "max": 0.8982905149459839,
+            "p95": 0.712099015712738
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.1098272800445557,
+            "min": 0.11180931329727173,
+            "max": 3.446549654006958,
+            "p95": 2.834050178527832
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.0924469232559204,
+            "min": 0.11180931329727173,
+            "max": 3.0,
+            "p95": 2.834050178527832
+          }
+        },
+        "left_shoulder_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.3839900493621826,
+            "min": 0.03943607956171036,
+            "max": 4.835583209991455,
+            "p95": 3.7300429344177246
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3642078936100006,
+            "min": 0.01037791557610035,
+            "max": 1.27252197265625,
+            "p95": 0.9815902709960938
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4364773631095886,
+            "min": 0.024517104029655457,
+            "max": 1.241361379623413,
+            "p95": 1.0065702199935913
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4364773631095886,
+            "min": 0.024517104029655457,
+            "max": 1.241361379623413,
+            "p95": 1.0065702199935913
+          }
+        },
+        "left_elbow_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.058851480484009,
+            "min": 0.07460123300552368,
+            "max": 4.789671897888184,
+            "p95": 4.463906764984131
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.5418030023574829,
+            "min": 0.019631903618574142,
+            "max": 1.2604399919509888,
+            "p95": 1.1747123003005981
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.7149604558944702,
+            "min": 0.02260114997625351,
+            "max": 1.866247534751892,
+            "p95": 1.5530260801315308
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.7149604558944702,
+            "min": 0.02260114997625351,
+            "max": 1.866247534751892,
+            "p95": 1.5530260801315308
+          }
+        },
+        "left_wrist_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.0838801860809326,
+            "min": 0.09025228023529053,
+            "max": 3.1469035148620605,
+            "p95": 2.3734359741210938
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.28523167967796326,
+            "min": 0.02375059947371483,
+            "max": 0.8281325101852417,
+            "p95": 0.6245884299278259
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.16834332048892975,
+            "min": 0.0047272369265556335,
+            "max": 0.5488192439079285,
+            "p95": 0.3748222291469574
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.16834332048892975,
+            "min": 0.0047272369265556335,
+            "max": 0.5488192439079285,
+            "p95": 0.3748222291469574
+          }
+        },
+        "left_wrist_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.3354547023773193,
+            "min": 0.06241023913025856,
+            "max": 2.7645442485809326,
+            "p95": 2.5148537158966064
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3514353930950165,
+            "min": 0.016423746943473816,
+            "max": 0.7275116443634033,
+            "p95": 0.6618036031723022
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.10375036299228668,
+            "min": 0.004251562524586916,
+            "max": 0.27701398730278015,
+            "p95": 0.23161059617996216
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.10375036299228668,
+            "min": 0.004251562524586916,
+            "max": 0.27701398730278015,
+            "p95": 0.23161059617996216
+          }
+        },
+        "left_wrist_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1662244200706482,
+            "min": 0.006520520430058241,
+            "max": 0.49320876598358154,
+            "p95": 0.42266184091567993
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.04374326393008232,
+            "min": 0.0017159264534711838,
+            "max": 0.12979178130626678,
+            "p95": 0.11122680455446243
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.038194045424461365,
+            "min": 0.0015580710023641586,
+            "max": 0.10195236653089523,
+            "p95": 0.08741375803947449
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.038194045424461365,
+            "min": 0.0015580710023641586,
+            "max": 0.10195236653089523,
+            "p95": 0.08741375803947449
+          }
+        },
+        "right_shoulder_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.6731512546539307,
+            "min": 0.05152711644768715,
+            "max": 3.752305507659912,
+            "p95": 3.322720527648926
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4403029978275299,
+            "min": 0.013559767976403236,
+            "max": 0.9874488115310669,
+            "p95": 0.8744001388549805
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 2.0392062664031982,
+            "min": 0.06004977226257324,
+            "max": 4.24029016494751,
+            "p95": 3.9286468029022217
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.931412935256958,
+            "min": 0.06004977226257324,
+            "max": 3.0,
+            "p95": 3.0
+          }
+        },
+        "right_shoulder_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.598176121711731,
+            "min": 0.05159240961074829,
+            "max": 3.6045353412628174,
+            "p95": 3.349085807800293
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4205726385116577,
+            "min": 0.013576949946582317,
+            "max": 0.94856196641922,
+            "p95": 0.881338357925415
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.4280025959014893,
+            "min": 0.20207566022872925,
+            "max": 3.464442014694214,
+            "p95": 3.021395206451416
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.4181649684906006,
+            "min": 0.20207566022872925,
+            "max": 3.0,
+            "p95": 3.0
+          }
+        },
+        "right_shoulder_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.3478527069091797,
+            "min": 0.13893461227416992,
+            "max": 2.827308177947998,
+            "p95": 2.6695196628570557
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.3546980619430542,
+            "min": 0.036561738699674606,
+            "max": 0.7440284490585327,
+            "p95": 0.7025051712989807
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4348142147064209,
+            "min": 0.033455900847911835,
+            "max": 1.3726478815078735,
+            "p95": 1.0364086627960205
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4348142147064209,
+            "min": 0.033455900847911835,
+            "max": 1.3726478815078735,
+            "p95": 1.0364086627960205
+          }
+        },
+        "right_elbow_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.5834870338439941,
+            "min": 0.10398554056882858,
+            "max": 4.310826301574707,
+            "p95": 3.3737709522247314
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.4167070984840393,
+            "min": 0.027364617213606834,
+            "max": 1.1344280242919922,
+            "p95": 0.8878344893455505
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.5974751114845276,
+            "min": 0.02902941405773163,
+            "max": 1.5135053396224976,
+            "p95": 1.2534775733947754
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.5974751114845276,
+            "min": 0.02902941405773163,
+            "max": 1.5135053396224976,
+            "p95": 1.2534775733947754
+          }
+        },
+        "right_wrist_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.1008172035217285,
+            "min": 0.10107500106096268,
+            "max": 3.255964994430542,
+            "p95": 2.640446901321411
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.28968870639801025,
+            "min": 0.02659868448972702,
+            "max": 0.8568329215049744,
+            "p95": 0.6948544383049011
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.16806857287883759,
+            "min": 0.013169482350349426,
+            "max": 0.510818362236023,
+            "p95": 0.4062344431877136
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.16806857287883759,
+            "min": 0.013169482350349426,
+            "max": 0.510818362236023,
+            "p95": 0.4062344431877136
+          }
+        },
+        "right_wrist_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.9751904010772705,
+            "min": 0.05328064784407616,
+            "max": 3.258354663848877,
+            "p95": 2.9479479789733887
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.256629079580307,
+            "min": 0.014021223410964012,
+            "max": 0.8574617505073547,
+            "p95": 0.7757757902145386
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.09047680348157883,
+            "min": 0.0021744053810834885,
+            "max": 0.32321643829345703,
+            "p95": 0.21437621116638184
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.09047680348157883,
+            "min": 0.0021744053810834885,
+            "max": 0.32321643829345703,
+            "p95": 0.21437621116638184
+          }
+        },
+        "right_wrist_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1766788512468338,
+            "min": 0.016697583720088005,
+            "max": 0.544887363910675,
+            "p95": 0.4982103407382965
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.046494435518980026,
+            "min": 0.004394100978970528,
+            "max": 0.143391415476799,
+            "p95": 0.13110798597335815
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.036222390830516815,
+            "min": 0.0030045993626117706,
+            "max": 0.11227206885814667,
+            "p95": 0.08555746078491211
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.036222390830516815,
+            "min": 0.0030045993626117706,
+            "max": 0.11227206885814667,
+            "p95": 0.08555746078491211
+          }
+        },
+        "head_pitch_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.6781588792800903,
+            "min": 0.02646356262266636,
+            "max": 2.237215757369995,
+            "p95": 1.7361103296279907
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1784628927707672,
+            "min": 0.006964095402508974,
+            "max": 0.5887410044670105,
+            "p95": 0.4568711519241333
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1055535152554512,
+            "min": 0.010730811394751072,
+            "max": 0.21850164234638214,
+            "p95": 0.1831316351890564
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1055535152554512,
+            "min": 0.010730811394751072,
+            "max": 0.21850164234638214,
+            "p95": 0.1831316351890564
+          }
+        },
+        "head_roll_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.1679399013519287,
+            "min": 0.011420492082834244,
+            "max": 0.7144997715950012,
+            "p95": 0.4486043453216553
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.04419470950961113,
+            "min": 0.0030053926166146994,
+            "max": 0.18802626430988312,
+            "p95": 0.11805377900600433
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.07734076678752899,
+            "min": 0.006246846169233322,
+            "max": 0.20953071117401123,
+            "p95": 0.17926008999347687
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.07734076678752899,
+            "min": 0.006246846169233322,
+            "max": 0.20953071117401123,
+            "p95": 0.17926008999347687
+          }
+        },
+        "head_yaw_joint": {
+          "speed_peak_rad_s": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 1.0178786516189575,
+            "min": 0.07757829129695892,
+            "max": 2.5260274410247803,
+            "p95": 2.2334952354431152
+          },
+          "speed_ratio": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.26786279678344727,
+            "min": 0.02041533961892128,
+            "max": 0.6647440791130066,
+            "p95": 0.5877619385719299
+          },
+          "raw_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.08566874265670776,
+            "min": 0.0024198293685913086,
+            "max": 0.22939467430114746,
+            "p95": 0.17666840553283691
+          },
+          "applied_torque_peak_nm": {
+            "count": 101,
+            "nonfinite_count": 0,
+            "mean": 0.08566874265670776,
+            "min": 0.0024198293685913086,
+            "max": 0.22939467430114746,
+            "p95": 0.17666840553283691
+          }
+        }
+      }
+    }
+  }
+}

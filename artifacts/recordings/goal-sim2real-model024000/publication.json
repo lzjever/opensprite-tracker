@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "mode": "metadata_only_relocation",
+  "original_checkpoint_sha256": "b9711c1f157782fd9539f2069d1c247cbc8887d2928d1f121533a9adb5a75cd4",
+  "portable_checkpoint_sha256": "fb3dc3940ed56dcadc4ab10c02c58306f8676177d3a7f7a4aa38a29924d3189f",
+  "checkpoint_tensor_equivalence": {
+    "wm": 20,
+    "pi": 22,
+    "critic": 19,
+    "opt_wm": 42,
+    "opt_pi": 48,
+    "opt_v": 48,
+    "sampling": 2,
+    "transition_model": 16,
+    "opt_transition": 36
+  },
+  "checkpoint_nonpath_training_scalars_unchanged": true,
+  "rollout_nonmetadata_arrays_exact": 78,
+  "cpu_load_policy_without_motion_override": {
+    "iteration": 24000,
+    "obs_dim": 99,
+    "goal_frames": 10,
+    "finite_forward": true
+  },
+  "original_recording_checks": 80,
+  "original_checks_rerun_on_relocated_package": false,
+  "source_job_unchanged": true,
+  "note": "Only path metadata and serialization storage locations were relocated. Learned parameters, optimizer tensors, normalization, sampler state and all trajectory arrays are exactly preserved. Original recording checks describe the source job; the release manifest lists hashes of the published files."
+}

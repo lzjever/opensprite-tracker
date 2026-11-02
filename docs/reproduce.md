@@ -6,7 +6,7 @@
 
 ## 环境
 
-Linux、Python3.12、CUDA12.8；训练使用支持CUDA的GPU。准备Git LFS、Node.js≥18、FFmpeg和EGL运行库。Ubuntu可安装 `git-lfs nodejs ffmpeg libegl1 libgl1`；发行版Node过旧时另装新版。
+Linux、Python3.12、CUDA12.8；训练使用支持CUDA的GPU。准备Git LFS、Node.js≥18、FFmpeg和EGL运行库。Ubuntu可安装 `git-lfs nodejs ffmpeg libegl1 libgl1 fonts-noto-cjk`；发行版Node过旧时另装新版。
 
 ```bash
 git lfs install --local
@@ -78,25 +78,35 @@ CLI每小时审查为可选工具，新配方使用[独立审查任务](plan/hou
 
 ## 评估和完整录像
 
+新录像对应`goal-sim2real / model24000`。使用同一快照重新评估或录制时，显式指定checkpoint：
+
 ```bash
-.venv/bin/python scripts/demo.py evaluate --output outputs/my-evaluation
-.venv/bin/python scripts/demo.py record --output outputs/my-recording
+.venv/bin/python scripts/demo.py evaluate \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
+  --num-envs 3 --seed 42 --output outputs/my-sim2real-evaluation
+.venv/bin/python scripts/demo.py record \
+  --checkpoint artifacts/checkpoints/goal-sim2real_model_024000.pt \
+  --num-envs 1 --seed 42 --output outputs/my-sim2real-recording
 ```
 
-评估默认30000轮快照、seed42、N3；录像默认18000轮快照、seed42、N1。可增加 `--checkpoint outputs/my-dance/model_XXXXXX.pt` 选择自己的模型。评估从第一帧请求全源，失败后仍以首次失败计分；录像在失败后继续真实控制至源结尾，并在HUD标注。示例首次失败193.76秒，完整225.66秒不代表完整成功。
+默认CLI未变：不传`--checkpoint`时，评估仍为`goal-sim/model30000`、seed42、N3；录像仍为`goal-sim/model18000`、seed42、N1。也可指定自己的模型路径。模型接口与执行器模式从checkpoint读取。
+
+新[完整MP4](../artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)、[同一快照](../artifacts/checkpoints/goal-sim2real_model_024000.pt)和[真实rollout](../artifacts/recordings/goal-sim2real-model024000/rollout.npz)均随仓库提供。[预览GIF](media/goal-sim2real-model024000-preview.gif)拼接0–4、192–196、221–225秒三个片段，[静态海报](media/goal-sim2real-model024000-poster.png)可单独查看。model24000是首次检查这次录像请求时选定的最新已保存中间快照，不是八小时最终checkpoint，也不表示当前训练仍以它为最新版本。原[B站视频](https://b23.tv/aMs7Vw3)对应`goal-sim/model18000`，不是新录像。
+
+评估从第一帧请求全源，失败后仍以首次失败计分；录像在失败后继续真实控制至源结尾，并在HUD标注。新录像首次失败193.76秒，此后同一策略继续至225.66秒，无重置或参考循环；完整视频不代表完整跟踪成功。
 
 已有rollout无需重新执行策略或物理，直接生成视频：
 
 ```bash
 MUJOCO_GL=egl .venv/bin/python -m opensprite_tracker.supermimic.render \
-  --rollout artifacts/recordings/dance-model018000/rollout.npz \
+  --rollout artifacts/recordings/goal-sim2real-model024000/rollout.npz \
   --model assets/opensprite/opensprite.xml \
   --output outputs/my-rerender --env-index 0 \
   --width 1920 --height 1080 --fps 50 \
   --include-post-failure --failure-hold-seconds 0
 ```
 
-显式指定仓库内模型可覆盖录像元数据中的机器路径。地面为格子，蓝色半透明机器人表示参考，HUD包含源时间、误差、力矩/速度和失败状态。视频帧覆盖0–225.66秒；50fps容器时长为225.68秒。
+显式指定仓库内模型可覆盖录像元数据中的机器路径。地面为格子，蓝色半透明机器人表示参考，HUD包含源时间、误差、力矩/速度和失败状态。新录像为1080p、50fps、11284帧，帧状态覆盖0–225.66秒；末状态也占一帧，容器时长为225.68秒。关节effort限幅与速度软约束的边界见[硬件限制核验](hardware-limits.md)；这些仿真结果不构成实机验证。
 
 ## 已执行的独立性检查
 
