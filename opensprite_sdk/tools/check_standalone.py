@@ -26,7 +26,9 @@ EXCLUDED = {".reference", ".venv", "outputs", "build", "dist", "__pycache__", ".
 
 
 def excluded(path):
-    return any(part in EXCLUDED or part.endswith(".egg-info") for part in path.parts) or path.suffix in (".pyc", ".pyo") or path.name == "MUJOCO_LOG.TXT"
+    return (any(part in EXCLUDED or part.endswith(".egg-info") for part in path.parts)
+            or path.suffix in (".pyc", ".pyo") or path.name == "MUJOCO_LOG.TXT"
+            or path.match("config/*.local.json"))
 
 
 def run(command, *, cwd, log, env=None, timeout=180):

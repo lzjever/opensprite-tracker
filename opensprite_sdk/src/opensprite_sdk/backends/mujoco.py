@@ -95,7 +95,7 @@ class MujocoBackend:
         self._raw_tau = np.zeros(31)
         delay = self.profile["command_delay"]
         self._queue = deque(maxlen=delay["max_ticks"] + 1)
-        self._lag = 0
+        self._lag = delay["min_ticks"]
         self._phase = int(self._rng.integers(delay["refresh_ticks"])) if delay["random_phase"] else 0
         filename = Path(model_path) if model_path else PACKAGE_ROOT / self.profile["robot_model"]
         self.model = self._build_model(filename)
@@ -185,7 +185,7 @@ class MujocoBackend:
         self._cmd = None
         self._last_applied_command = None
         self._queue.clear()
-        self._lag = 0
+        self._lag = self.profile["command_delay"]["min_ticks"]
         self._tau.fill(0)
         self._raw_tau.fill(0)
         self._session = uuid.uuid4().hex
@@ -248,6 +248,8 @@ class MujocoBackend:
         if command.seq <= self._last_cmd_seq:
             raise ValueError("command sequence was replayed or reordered")
         if modes == {0}:
+            self._owner = owner
+            self._last_cmd_seq = command.seq
             self.disable()
             return
         if not self._enabled:

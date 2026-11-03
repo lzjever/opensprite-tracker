@@ -133,6 +133,8 @@ struct Motor {
   double preview_kd = 0.0;
   double preview_feedforward_torque = 0.0;
   bool preview_initialized = false;
+  std::array<std::uint8_t, 8> last_policy_payload{};
+  bool last_policy_payload_valid = false;
   double captured_position = 0.0;
   double maximum_abs_position_drift = 0.0;
   double maximum_abs_speed = 0.0;
@@ -808,6 +810,7 @@ void drain_target_packets(IpcSocket& ipc, std::uint64_t policy_joint_hash,
       throw std::runtime_error("policy IPC target ABI/order invariant failed");
     }
     if (packet.sequence <= ipc.last_target_sequence ||
+        packet.source_state_sequence == 0 ||
         packet.source_state_sequence > ipc.state_sequence ||
         ipc.state_sequence - packet.source_state_sequence > 5) {
       throw std::runtime_error("policy IPC target sequence invariant failed");
@@ -881,6 +884,16 @@ void preview_final_motor_commands(std::vector<Motor>& motors, IpcSocket& ipc,
         ipc.latest_target.kd[joint] *
             (ipc.latest_target.velocity_rad_s[joint] - joint_velocity[joint]) +
         ipc.latest_target.feedforward_torque_nm[joint];
+    // Unitree-style joint impedance is retained. Non-ankle drives execute PD
+    // internally, so silently clamping a host-only torque value would not limit
+    // their actual command. Reject the complete request, including held targets
+    // re-evaluated against fresh feedback, before any motor frame is sent.
+    if (!std::isfinite(raw) ||
+        (kinematics.joint_names[joint].find("ankle_") == std::string::npos &&
+         std::abs(raw) > kinematics.joint_effort_limit[joint] + 1.0e-9)) {
+      throw std::runtime_error("complete joint impedance effort limit failed for " +
+                               kinematics.joint_names[joint]);
+    }
     joint_torque[joint] = std::clamp(
         raw, -kinematics.joint_effort_limit[joint], kinematics.joint_effort_limit[joint]);
   }
@@ -1115,6 +1128,77 @@ std::array<std::uint8_t, 8> protected_policy_payload(Motor& motor, bool bounded 
       static_cast<std::uint8_t>(torque)};
 }
 
+// Decode the exact MIT command, including q/dq/Kp/Kd/feedforward quantization.
+// Feedback is the latest host observation, not a claim about instantaneous
+// drive-internal torque between feedback samples.
+double encoded_policy_motor_torque(
+    const Motor& motor, const std::array<std::uint8_t, 8>& payload) {
+  const auto p = (static_cast<unsigned>(payload[0]) << 8) | payload[1];
+  const auto v = (static_cast<unsigned>(payload[2]) << 4) | (payload[3] >> 4);
+  const auto kp = (static_cast<unsigned>(payload[3] & 0xF) << 8) | payload[4];
+  const auto kd = (static_cast<unsigned>(payload[5]) << 4) | (payload[6] >> 4);
+  const auto ff = (static_cast<unsigned>(payload[6] & 0xF) << 8) | payload[7];
+  return decode_uint(kp, 0.0, 500.0, 12) *
+             (decode_uint(p, motor.position_min, motor.position_max, 16) - motor.last_position) +
+         decode_uint(kd, 0.0, 5.0, 12) *
+             (decode_uint(v, motor.velocity_min, motor.velocity_max, 12) - motor.last_velocity) +
+         decode_uint(ff, motor.torque_min, motor.torque_max, 12);
+}
+
+using PolicyPayloads = std::array<std::array<std::uint8_t, 8>, kJointCount>;
+
+PolicyPayloads checked_policy_slot(
+    std::vector<Motor>& motors, const NativeKinematics& kinematics,
+    const std::array<bool, kJointCount>& due, bool bounded = false) {
+  PolicyPayloads payloads{};
+  std::array<double, kJointCount> motor_torque{};
+  std::array<double, kJointCount> joint_torque{};
+  const auto checked_motor_torque = [&](std::size_t index,
+                                       const std::array<std::uint8_t, 8>& payload) {
+    const double value = encoded_policy_motor_torque(motors[index], payload);
+    if (!std::isfinite(value) ||
+        std::abs(value) > motors[index].commissioning_torque_cap + 1.0e-9) {
+      throw std::runtime_error("held/encoded motor effort limit failed for " + motors[index].name);
+    }
+    return value;
+  };
+  const auto check_joints = [&]() {
+    for (std::size_t joint = 0; joint < kJointCount; ++joint) {
+      if (!std::isfinite(joint_torque[joint]) ||
+          std::abs(joint_torque[joint]) > kinematics.joint_effort_limit[joint] + 1.0e-9) {
+        throw std::runtime_error("encoded joint effort limit failed for " +
+                                 kinematics.joint_names[joint]);
+      }
+    }
+  };
+  for (std::size_t motor = 0; motor < kJointCount; ++motor) {
+    payloads[motor] = motors[motor].last_policy_payload_valid
+        ? motors[motor].last_policy_payload : zero_gain_payload(motors[motor]);
+    motor_torque[motor] = checked_motor_torque(motor, payloads[motor]);
+    for (std::size_t joint = 0; joint < kJointCount; ++joint) {
+      // q_motor=A*q_joint+offset => tau_joint=A^T*tau_motor.
+      joint_torque[joint] += kinematics.joint_to_motor[motor][joint] * motor_torque[motor];
+    }
+  }
+  check_joints();
+  // Stage and check each prefix in the exact order used by the send loop.
+  // This also covers coupled motors on different buses with the same phase:
+  // the intermediate A-new/B-held vector can violate limits while the final
+  // all-new vector is safe. Nothing is sent unless every prefix passes.
+  for (std::size_t motor = 0; motor < kJointCount; ++motor) {
+    if (!due[motor]) continue;
+    payloads[motor] = protected_policy_payload(motors[motor], bounded);
+    const double next = checked_motor_torque(motor, payloads[motor]);
+    const double delta = next - motor_torque[motor];
+    for (std::size_t joint = 0; joint < kJointCount; ++joint) {
+      joint_torque[joint] += kinematics.joint_to_motor[motor][joint] * delta;
+    }
+    motor_torque[motor] = next;
+    check_joints();
+  }
+  return payloads;
+}
+
 void send_payload(Socket& socket, Motor& motor,
                   const std::array<std::uint8_t, 8>& data) {
   canfd_frame frame{};
@@ -1143,10 +1227,17 @@ void drain_hold_feedback(
     const std::map<std::pair<std::string, int>, std::size_t>& feedback_map,
     int expected_status, bool enforce_motion_guards) {
   for (auto& can_socket : sockets) {
+    std::size_t drained = 0;
     while (true) {
       canfd_frame frame{};
       const ssize_t received = read(can_socket.fd, &frame, CANFD_MTU);
       if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+      if (received <= 0) {
+        throw std::runtime_error("measured-hold CAN-FD feedback read failed for " + can_socket.interface);
+      }
+      if (expected_status < 0 && ++drained > 256) {
+        throw std::runtime_error("shutdown CAN-FD drain budget exceeded for " + can_socket.interface);
+      }
       if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
         throw std::runtime_error("invalid measured-hold CAN-FD feedback frame");
       }
@@ -1275,10 +1366,17 @@ void drain_policy_feedback(
     const std::map<std::pair<std::string, int>, std::size_t>& feedback_map,
     int expected_status, bool enforce_dynamic_guards) {
   for (auto& can_socket : sockets) {
+    std::size_t drained = 0;
     while (true) {
       canfd_frame frame{};
       const ssize_t received = read(can_socket.fd, &frame, CANFD_MTU);
       if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+      if (received <= 0) {
+        throw std::runtime_error("protected-policy CAN-FD feedback read failed for " + can_socket.interface);
+      }
+      if (expected_status < 0 && ++drained > 256) {
+        throw std::runtime_error("shutdown CAN-FD drain budget exceeded for " + can_socket.interface);
+      }
       if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
         // A bus fault can leave stale or malformed frames queued while shutting
         // down. Keep polling for a valid disabled reply from every endpoint.
@@ -1359,6 +1457,83 @@ void drain_policy_feedback(
       }
     }
   }
+}
+
+using FeedbackDrain = void (*)(
+    std::vector<Socket>&, std::vector<Motor>&,
+    const std::map<std::pair<std::string, int>, std::size_t>&, int, bool);
+
+// Every reachable endpoint receives all three disable attempts even if another
+// motor or bus fails. Errors remain failures; successful cleanup is never
+// inferred from sending a frame or from the status seen before shutdown.
+std::string best_effort_disable(
+    std::vector<Socket>& sockets, std::vector<Motor>& motors,
+    const std::map<std::string, std::size_t>& socket_index,
+    const std::map<std::pair<std::string, int>, std::size_t>& feedback_map,
+    FeedbackDrain drain) {
+  std::vector<std::string> errors;
+  const auto record = [&](const std::string& error) {
+    if (std::find(errors.begin(), errors.end(), error) == errors.end()) errors.push_back(error);
+  };
+  for (auto& motor : motors) {
+    motor.seen = false;
+    motor.final_disabled = false;
+  }
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    for (auto& motor : motors) {
+      try {
+        send_special(sockets.at(socket_index.at(motor.interface)), motor, 0xFD);
+      } catch (const std::exception& error) {
+        record("disable " + motor.name + ": " + error.what());
+      }
+    }
+    usleep(10000);
+  }
+  const auto drain_each_bus = [&]() {
+    for (auto& socket : sockets) {
+      try {
+        std::vector<Socket> one_bus{socket};
+        drain(one_bus, motors, feedback_map, -1, false);
+      } catch (const std::exception& error) {
+        record("verify bus " + socket.interface + ": " + error.what());
+      }
+    }
+  };
+  const std::int64_t verify_start = monotonic_ns() + 10'000'000LL;
+  for (std::size_t slot = 0; slot < 400; ++slot) {
+    try {
+      const timespec deadline = from_ns(verify_start + static_cast<std::int64_t>(slot) * kTransportPeriodNs);
+      int status = 0;
+      do status = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, nullptr);
+      while (status == EINTR);
+      if (status != 0) throw std::runtime_error("clock_nanosleep failed");
+    } catch (const std::exception& error) {
+      record(error.what());
+    }
+    for (auto& motor : motors) {
+      const bool due = motor.poll_rate_hz == 500
+          ? static_cast<int>(slot % 4) == motor.poll_phase
+          : static_cast<int>(slot % 40) == motor.poll_phase;
+      if (!due) continue;
+      try {
+        send_poll(sockets.at(socket_index.at(motor.interface)), motor);
+      } catch (const std::exception& error) {
+        record("poll " + motor.name + ": " + error.what());
+      }
+    }
+    drain_each_bus();
+  }
+  usleep(2000);
+  drain_each_bus();
+  for (const auto& motor : motors) {
+    if (!motor.final_disabled) record("final disabled verification failed for " + motor.name);
+  }
+  std::string failure;
+  for (const auto& error : errors) {
+    if (!failure.empty()) failure += "; ";
+    failure += error;
+  }
+  return failure;
 }
 
 int run_native_measured_pose_hold(
@@ -1529,35 +1704,11 @@ int run_native_measured_pose_hold(
   }
 
   // This block runs after success and every failure. 0xFD is disable, never set-zero.
-  try {
-    for (int attempt = 0; attempt < 3; ++attempt) {
-      for (auto& motor : motors) {
-        send_special(sockets[socket_index.at(motor.interface)], motor, 0xFD);
-      }
-      usleep(10000);
-    }
-    for (auto& motor : motors) {
-      motor.seen = false;
-      motor.final_disabled = false;
-    }
-    const std::int64_t verify_start = monotonic_ns() + 10'000'000LL;
-    for (std::size_t slot = 0; slot < 400; ++slot) {
-      sleep_until(verify_start + static_cast<std::int64_t>(slot) * kTransportPeriodNs);
-      for (auto& motor : motors) {
-        if (due(motor, slot)) send_poll(sockets[socket_index.at(motor.interface)], motor);
-      }
-      drain_hold_feedback(sockets, motors, feedback_map, -1, false);
-    }
-    usleep(2000);
-    drain_hold_feedback(sockets, motors, feedback_map, -1, false);
-    for (const auto& motor : motors) {
-      if (!motor.final_disabled) {
-        throw std::runtime_error("final disabled verification failed for " + motor.name);
-      }
-    }
-  } catch (const std::exception& error) {
+  const std::string shutdown_failure = best_effort_disable(
+      sockets, motors, socket_index, feedback_map, drain_hold_feedback);
+  if (!shutdown_failure.empty()) {
     if (!failure.empty()) failure += "; ";
-    failure += error.what();
+    failure += shutdown_failure;
   }
 
   std::ostringstream report;
@@ -1690,6 +1841,8 @@ int run_native_protected_policy(
       motor.rx_count = 0;
       motor.seen = false;
       motor.preview_initialized = false;
+      motor.last_policy_payload = zero_gain_payload(motor);
+      motor.last_policy_payload_valid = true;
       motor.maximum_abs_speed = 0.0;
       motor.maximum_abs_commanded_torque = 0.0;
       motor.maximum_abs_feedback_torque = 0.0;
@@ -1699,6 +1852,9 @@ int run_native_protected_policy(
     }
     ipc.motor_preview_count = 0;
 
+    // Disabled polling already latched zero-gain MIT frames. Verify even their
+    // finite-resolution residual against joint limits before enabling drives.
+    (void)checked_policy_slot(motors, kinematics, {});
     for (auto& motor : motors) {
       send_special(sockets[socket_index.at(motor.interface)], motor, 0xFC);
     }
@@ -1731,10 +1887,18 @@ int run_native_protected_policy(
         preview_final_motor_commands(
             motors, ipc, kinematics, options.saturate_policy_torque);
       }
-      for (auto& motor : motors) {
-        if (!due(motor, slot)) continue;
-        const auto payload = protected_policy_payload(motor, options.saturate_policy_torque);
-        send_payload(sockets[socket_index.at(motor.interface)], motor, payload);
+      std::array<bool, kJointCount> due_this_slot{};
+      for (std::size_t index = 0; index < motors.size(); ++index) {
+        due_this_slot[index] = due(motors[index], slot);
+      }
+      const auto payloads = checked_policy_slot(
+          motors, kinematics, due_this_slot, options.saturate_policy_torque);
+      for (std::size_t index = 0; index < motors.size(); ++index) {
+        auto& motor = motors[index];
+        if (!due_this_slot[index]) continue;
+        send_payload(sockets[socket_index.at(motor.interface)], motor, payloads[index]);
+        motor.last_policy_payload = payloads[index];
+        motor.last_policy_payload_valid = true;
       }
       // Permit only the short enable transition; require all endpoints enabled
       // after 100 ms and throughout the remaining active interval.
@@ -1775,35 +1939,11 @@ int run_native_protected_policy(
     active_rx[index] = motors[index].rx_count;
   }
 
-  try {
-    for (int attempt = 0; attempt < 3; ++attempt) {
-      for (auto& motor : motors) {
-        send_special(sockets[socket_index.at(motor.interface)], motor, 0xFD);
-      }
-      usleep(10000);
-    }
-    for (auto& motor : motors) {
-      motor.seen = false;
-      motor.final_disabled = false;
-    }
-    const std::int64_t verify_start = monotonic_ns() + 10'000'000LL;
-    for (std::size_t slot = 0; slot < 400; ++slot) {
-      sleep_until(verify_start + static_cast<std::int64_t>(slot) * kTransportPeriodNs);
-      for (auto& motor : motors) {
-        if (due(motor, slot)) send_poll(sockets[socket_index.at(motor.interface)], motor);
-      }
-      drain_policy_feedback(sockets, motors, feedback_map, -1, false);
-    }
-    usleep(2000);
-    drain_policy_feedback(sockets, motors, feedback_map, -1, false);
-    for (const auto& motor : motors) {
-      if (!motor.final_disabled) {
-        throw std::runtime_error("final disabled verification failed for " + motor.name);
-      }
-    }
-  } catch (const std::exception& error) {
+  const std::string shutdown_failure = best_effort_disable(
+      sockets, motors, socket_index, feedback_map, drain_policy_feedback);
+  if (!shutdown_failure.empty()) {
     if (!failure.empty()) failure += "; ";
-    failure += error.what();
+    failure += shutdown_failure;
   }
 
   std::ostringstream report;
@@ -2150,11 +2290,22 @@ int main(int argc, char** argv) {
         if (slot % 4 == 0 &&
             std::all_of(motors.begin(), motors.end(), [](const Motor& motor) { return motor.seen; })) {
           preview_final_motor_commands(motors, ipc, kinematics, options.bounded_shadow_preview);
-          if (options.bounded_shadow_preview && ipc.has_target) {
-            for (auto& motor : motors) {
-              // Validate the same quantized command as actuation, but never send it.
-              (void)protected_policy_payload(motor, true);
-            }
+        }
+        if (ipc.has_target && ipc.motor_preview_count > 0) {
+          std::array<bool, kJointCount> due_this_slot{};
+          for (std::size_t index = 0; index < motors.size(); ++index) {
+            due_this_slot[index] = motors[index].poll_rate_hz == 500
+                ? static_cast<int>(slot % 4) == motors[index].poll_phase
+                : static_cast<int>(slot % 40) == motors[index].poll_phase;
+          }
+          // Exercise the same staggered, quantized policy path as actuation.
+          // These are virtual held commands only; CAN still sends zero-gain polls.
+          const auto proposed = checked_policy_slot(
+              motors, kinematics, due_this_slot, options.bounded_shadow_preview);
+          for (std::size_t index = 0; index < motors.size(); ++index) {
+            if (!due_this_slot[index]) continue;
+            motors[index].last_policy_payload = proposed[index];
+            motors[index].last_policy_payload_valid = true;
           }
         }
         if (slot % 40 == 39 &&

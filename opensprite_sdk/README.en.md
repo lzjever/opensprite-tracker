@@ -6,6 +6,8 @@ A self-contained SDK for OpenSprite simulation and Jetson deployment. It follows
 
 All public arrays use OpenSprite's31-joint order. `motor_cmd` and `motor_state` are spelling aliases for joint-space data. Physical motor mapping, both ankle differentials, and the head pitch/roll differential belong to the hardware backend. This release supports in-process and local Unix channels; it is **not Unitree DDS wire compatible and does not provide remote DDS transport**.
 
+Controllers subscribe to state and publish commands asynchronously, following the SDK2 idiom. A successful `Write()` means transport acceptance, not execution. Slow diagnostics do not block publishers. Commands retain their actual source snapshot; source ages and current execution feedback are checked separately. See the [review fixes](docs/plan/review-fixes-20261103.md).
+
 Models, meshes, configuration templates and native sources are included. The directory can be extracted into its own repository. Research checkouts and generated output are ignored. See [licenses and provenance](THIRD_PARTY_NOTICES.md).
 
 ## Install and run

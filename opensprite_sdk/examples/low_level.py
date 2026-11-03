@@ -48,9 +48,19 @@ def run(args):
             joint.mode=0
         client.Write(disable)
         if state.clock_domain == "sim":
-            state=client.Read()
-            if state.status != "disabled":
-                raise RuntimeError("simulator did not acknowledge disable")
+            # Publisher acceptance is not execution acknowledgement. A final
+            # enabled snapshot may already be queued when mode0 is sent.
+            source_sequence, source_session = state.seq, state.session_id
+            deadline=time.monotonic()+1.
+            while True:
+                remaining=deadline-time.monotonic()
+                if remaining<=0:
+                    raise TimeoutError("simulator did not acknowledge disable")
+                state=client.Read(timeout=remaining)
+                if state.session_id!=source_session or state.faults:
+                    raise RuntimeError("simulator session changed or faulted while disabling")
+                if state.seq>source_sequence and state.status=="disabled":
+                    break
         return {"commands":count, "last_state_sequence":state.seq, "profile":state.profile_id,
                 "clock_domain":state.clock_domain, "status":state.status}
 

@@ -4,6 +4,7 @@ This module does not open CAN, enable motors at import, start a controller, or
 claim measured latency. The native supervisor is launched explicitly by users.
 """
 import copy
+from collections import OrderedDict
 from pathlib import Path
 import socket
 import tempfile
@@ -17,6 +18,10 @@ from .native_ipc import StatePacket, decode_icm, fresh, pack_target
 
 
 class HardwareBackend:
+    # Actor sources can legitimately lag the newest 50 Hz native snapshot.
+    # This is separate from the fresher feedback used by the native controller.
+    source_cache_size = 64
+    source_max_age_ns = 60_000_000
     capabilities = {'joint_coordinates':True,'joint_sample_timestamps':True,
                     'joint_sample_time_kind':'host_receive','torque_feedback':False,
                     'motor_enable_feedback':False,'global_pose':False,
@@ -30,6 +35,7 @@ class HardwareBackend:
         self._started=False;self._closed=False;self._enabled=False;self._fault=None
         self._previous_state=0;self._previous_imu=0;self._native_target=0;self._last_command=0
         self._state=None;self._packet=None;self._owner=None;self.session_id=uuid.uuid4().hex
+        self._source_states = OrderedDict()
 
     def start(self):
         if self._closed:
@@ -100,6 +106,7 @@ class HardwareBackend:
                 sample_time_kind='host_read',frame='body',attached_link=data['imu']['attached_link'])
             state.validate();self._state=state;self._packet=packet
             self._require_fresh_state()
+            self._remember_source(state)
             return copy.deepcopy(state)
         except BaseException as error:
             self._fault=str(error);self.close();raise
@@ -116,10 +123,41 @@ class HardwareBackend:
         for name,stamp in zip(self.config.motor_names,self._packet.host_receive_ns):
             fresh(stamp,now,10_000_000 if name in ankle_names else 60_000_000,name)
 
+    def _remember_source(self, state):
+        # Public callers receive mutable SDK messages. Never use their copy as
+        # the authority for a later command's causal source or sample ages.
+        self._source_states[state.seq] = copy.deepcopy(state)
+        now = self.clock()
+        while self._source_states:
+            sequence, snapshot = next(iter(self._source_states.items()))
+            if (len(self._source_states) <= self.source_cache_size
+                    and now-snapshot.stamp_ns <= self.source_max_age_ns):
+                break
+            del self._source_states[sequence]
+
+    def _require_fresh_source(self, command):
+        if command.source_state_session_id != self.session_id:
+            raise ValueError('target source session mismatch')
+        source = self._source_states.get(command.source_state_seq)
+        if source is None:
+            raise ValueError('target source sequence is unknown, expired or in the future')
+        now = self.clock()
+        fresh(source.stamp_ns, now, self.source_max_age_ns, 'command source state')
+        for joint in source.joint_state:
+            if not joint.valid or joint.sample_time_kind == 'unknown':
+                raise RuntimeError('command source joint measurement is invalid')
+            fresh(joint.sample_ns, now, self.source_max_age_ns, 'command source joint')
+        if not source.imu_state.valid or source.imu_state.sample_time_kind == 'unknown':
+            raise RuntimeError('command source IMU measurement is invalid')
+        fresh(source.imu_state.sample_ns, now,
+              int(self.config.data['imu']['max_age_ms']*1e6), 'command source IMU')
+
     def _send(self,command):
         self._require_fresh_state()
+        self._require_fresh_source(command)
         self._native_target+=1
-        payload=pack_target(command,self.clock(),JOINT_ORDER_HASH,self._native_target,self._state.seq)
+        payload=pack_target(command,self.clock(),JOINT_ORDER_HASH,self._native_target,
+                            command.source_state_seq)
         if self._state_socket.send(payload)!=len(payload):
             raise RuntimeError('short native target IPC write')
 
@@ -139,7 +177,8 @@ class HardwareBackend:
         if not self._packet.actuation_allowed:
             raise RuntimeError('zero-gain-only shadow daemon cannot enable motors')
         self._require_fresh_state()
-        command=LowCmd_(profile_id=self.profile_id,source_state_seq=self._state.seq)
+        command=LowCmd_(profile_id=self.profile_id,source_state_seq=self._state.seq,
+                        source_state_session_id=self.session_id)
         for target,measured in zip(command.joint_cmd,self._state.joint_state):
             target.mode=1;target.q=measured.q
         try:self._send(command);self._enabled=True
@@ -173,10 +212,7 @@ class HardwareBackend:
             raise ValueError('hardware command profile/clock mismatch')
         if not command.session_id or (self._owner is not None and command.session_id!=self._owner):
             raise ValueError('hardware command controller session/owner mismatch')
-        if self._state is None or command.source_state_session_id!=self._state.session_id:
-            raise ValueError('target source session mismatch')
-        if command.source_state_seq!=self._state.seq:
-            raise ValueError('target must refer to latest native state sequence')
+        self._require_fresh_source(command)
         if command.seq<=self._last_command:
             raise ValueError('command sequence regression/replay')
         fresh(command.stamp_ns,self.clock(),100_000_000,'command')
@@ -205,6 +241,7 @@ class HardwareBackend:
 
     def close(self):
         self._enabled=False;self._closed=True
+        self._source_states.clear()
         for sock in (self._state_socket,self._imu_socket):
             if sock is not None:
                 try:sock.close()

@@ -1,4 +1,5 @@
 include README.md README.en.md LICENSE THIRD_PARTY_NOTICES.md
+include .gitignore .gitattributes
 recursive-include src *.py *.json *.xml *.urdf *.STL *.md LICENSE
 recursive-include native *.cpp *.hpp *.h *.c *.txt *.md LICENSE
 recursive-include config *.example.json

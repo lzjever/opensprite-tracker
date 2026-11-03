@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import select
 import socket
 import threading
 import time
@@ -324,6 +325,85 @@ class ChannelSubscriber:
         self._threads.clear()
 
 
+class _OutboundSubscriber:
+    """One bounded latest-value slot, serviced independently of publishers.
+
+    A successful broker write means the frame was accepted, not that every
+    reader has consumed it. This follows the SDK2 publisher/subscriber idiom
+    without treating a diagnostics reader as an execution acknowledgement.
+    """
+    def __init__(self, sock, message_type):
+        self.socket, self.message_type = sock, message_type
+        # A positive Python socket timeout performs a readiness wait even with
+        # MSG_DONTWAIT. Keep a separate wrapper with timeout=0 for sends. The
+        # underlying descriptor is already O_NONBLOCK for the timed reader.
+        self._writer = socket.socket(fileno=os.dup(sock.fileno()))
+        self._writer.setblocking(False)
+        self._condition = threading.Condition()
+        self._pending = None
+        self._active = True
+        self.dropped_frames = 0
+
+    def enqueue(self, payload):
+        with self._condition:
+            if not self._active:
+                return
+            if self._pending is not None:
+                self.dropped_frames += 1
+            self._pending = payload
+            self._condition.notify()
+
+    def _send_pending(self):
+        # Caller holds _condition, so a close-time flush cannot overtake this
+        # send. SOCK_SEQPACKET preserves the whole frame or reports EAGAIN.
+        if self._pending is None:
+            return True
+        try:
+            sent = self._writer.send(self._pending, socket.MSG_DONTWAIT)
+        except BlockingIOError:
+            return False
+        if sent != len(self._pending):
+            raise ConnectionError("short subscriber channel write")
+        self._pending = None
+        return True
+
+    def run(self):
+        try:
+            while True:
+                with self._condition:
+                    while self._active and self._pending is None:
+                        self._condition.wait()
+                    if not self._active:
+                        return
+                    if self._send_pending():
+                        continue
+                # Never hold the queue lock while waiting. A newer sample can
+                # replace the blocked pending frame, keeping memory bounded.
+                select.select([], [self._writer], [], .02)
+        except (OSError, ValueError):
+            self.close(flush=False)
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def close(self, *, flush=True):
+        with self._condition:
+            if not self._active:
+                return
+            if flush:
+                # One nonblocking attempt preserves a final disabled state for
+                # healthy readers. A full/paused reader is never awaited.
+                try:
+                    self._send_pending()
+                except OSError:
+                    pass
+            self._active = False
+            self._pending = None
+            self._condition.notify_all()
+            self._writer.close()
+
+
 class ChannelServer:
     """Local SDK channel broker, independent of the native motor-controller IPC."""
     def __init__(self, endpoint, domain_id=0):
@@ -380,6 +460,7 @@ class ChannelServer:
 
     def _serve(self, client):
         topic = role = None
+        outbound = None
         try:
             registration = _receive(client)
             if set(registration) != {"op", "domain", "topic", "type"}:
@@ -397,8 +478,13 @@ class ChannelServer:
                         raise RuntimeError("topic already has a publisher")
                     self._publishers[topic] = (client, message_type)
                 else:
-                    self._subscribers.setdefault(topic, {})[client] = message_type
+                    outbound = _OutboundSubscriber(client, message_type)
+                    self._subscribers.setdefault(topic, {})[client] = outbound
             _send(client, {"ok": True})
+            if outbound is not None:
+                # Start only after registration acknowledgement: a concurrent
+                # publisher may enqueue immediately, but cannot send first.
+                self._start(outbound.run)
             previous_sequence, session_id = 0, None
             while self._active:
                 try:
@@ -418,12 +504,12 @@ class ChannelServer:
                 previous_sequence, session_id = message.seq, message.session_id
                 with self._lock:
                     targets = tuple(self._subscribers.get(topic, {}).items())
-                for subscriber, expected in targets:
-                    if expected is message_type:
-                        try:
-                            _send(subscriber, {"message": frame["message"]})
-                        except OSError:
-                            subscriber.close()
+                payload = _encode({"message": frame["message"]})
+                for _, subscriber in targets:
+                    if subscriber.message_type is message_type:
+                        subscriber.enqueue(payload)
+                # ACK reflects validation and bounded broker acceptance, never
+                # a socket write or application action at any subscriber.
                 _send(client, {"ok": True})
         except (OSError, ValueError, RuntimeError, TypeError) as error:
             try:
@@ -431,6 +517,8 @@ class ChannelServer:
             except OSError:
                 pass
         finally:
+            if outbound is not None:
+                outbound.close()
             with self._lock:
                 if isinstance(topic, str) and topic in self._publishers and self._publishers[topic][0] is client:
                     del self._publishers[topic]
@@ -445,6 +533,10 @@ class ChannelServer:
             self._socket.close()
         with self._lock:
             clients = tuple(self._clients)
+            subscribers = tuple(peer for topic in self._subscribers.values()
+                                for peer in topic.values())
+        for peer in subscribers:
+            peer.close()
         for client in clients:
             try:
                 client.shutdown(socket.SHUT_RDWR)
