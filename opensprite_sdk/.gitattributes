@@ -1,0 +1,2 @@
+# Preserve upstream driver text byte-for-byte, including its comment whitespace.
+native/third_party/** whitespace=-blank-at-eol

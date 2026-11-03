@@ -1,0 +1,11 @@
+.reference/
+.venv/
+outputs/
+build/
+dist/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+MUJOCO_LOG.TXT
+config/*.local.json

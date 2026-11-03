@@ -1,6 +1,6 @@
 # OpenSprite Demo Tracker
 
-[简体中文](README.md)
+[简体中文](README.md) · [OpenSprite SDK](opensprite_sdk/README.en.md)
 
 A standalone simulation demo and development scaffold for **OpenSprite Sprite0825: 31 actuated joints and 32 link frames**. It includes raw motion, robot assets, UMR retargeting, SuperMimic-style training, evaluation, and video tools.
 

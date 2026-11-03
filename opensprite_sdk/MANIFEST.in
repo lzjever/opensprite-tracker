@@ -1,0 +1,15 @@
+include README.md README.en.md LICENSE THIRD_PARTY_NOTICES.md
+recursive-include src *.py *.json *.xml *.urdf *.STL *.md LICENSE
+recursive-include native *.cpp *.hpp *.h *.c *.txt *.md LICENSE
+recursive-include config *.example.json
+recursive-include examples *.py
+recursive-include tools *.py *.sh
+recursive-include docs *.md *.png
+recursive-include licenses *.txt
+recursive-include tests *.py
+prune .reference
+prune .venv
+prune outputs
+prune build
+prune dist
+global-exclude __pycache__ *.py[cod]

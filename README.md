@@ -1,6 +1,6 @@
 # OpenSprite Demo Tracker
 
-[English](README.en.md)
+[English](README.en.md) · [OpenSprite SDK 子工程](opensprite_sdk/README.md)
 
 这是给 [OpenSprite](https://github.com/BeijingDynamics/open_sprite) 做的动作跟踪 demo，也是一套可以接着开发的脚手架。当前只训练 LAFAN 中一条 **225.66 秒的长舞蹈 `dance2_subject1`**：用 UMR 做机器人动作 retargeting，用 SuperMimic 方法训练，在 MuJoCo Warp 中仿真并生成视频。
 
