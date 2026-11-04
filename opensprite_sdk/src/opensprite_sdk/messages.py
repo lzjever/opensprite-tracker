@@ -30,6 +30,16 @@ def _triple(value, label):
         _finite(component, label)
 
 
+def _string(value, label, bound, *, allow_empty=True):
+    if not isinstance(value, str) or "\0" in value or (not value and not allow_empty):
+        raise ValueError(f"invalid {label}")
+    try:
+        if len(value.encode("utf-8")) > bound:
+            raise ValueError(f"{label} exceeds its UTF-8 wire bound")
+    except UnicodeError as error:
+        raise ValueError(f"invalid UTF-8 {label}") from error
+
+
 @dataclass
 class JointCmd:
     mode: int = 0
@@ -102,7 +112,8 @@ class IMUState:
         _integer(self.sample_ns, "IMU sample_ns")
         if self.sample_time_kind not in ("unknown", "simulation", "host_read"):
             raise ValueError("invalid IMU sample_time_kind")
-        if self.frame != "body" or not isinstance(self.attached_link, str) or not 0 < len(self.attached_link) <= 128:
+        _string(self.attached_link, "attached_link", 128, allow_empty=False)
+        if self.frame != "body":
             raise ValueError("IMU requires body coordinates and a named attached link")
 
 
@@ -116,16 +127,14 @@ class _Header:
     session_id: str = ""
 
     def _validate_header(self):
-        if not isinstance(self.profile_id, str) or not 0 < len(self.profile_id) <= 128:
-            raise ValueError("invalid profile_id")
+        _string(self.profile_id, "profile_id", 128, allow_empty=False)
         if type(self.joint_order_hash) is not int or self.joint_order_hash != JOINT_ORDER_HASH:
             raise ValueError("joint order does not match OpenSprite SDK")
         _integer(self.seq, "sequence")
         _integer(self.stamp_ns, "stamp_ns")
         if self.clock_domain not in ("sim", "monotonic"):
             raise ValueError("clock_domain must be sim or monotonic")
-        if not isinstance(self.session_id, str) or len(self.session_id) > 128:
-            raise ValueError("invalid session_id")
+        _string(self.session_id, "session_id", 128)
 
 
 @dataclass
@@ -145,8 +154,7 @@ class LowCmd_(_Header):
     def validate(self):
         self._validate_header()
         _integer(self.source_state_seq, "source_state_seq")
-        if not isinstance(self.source_state_session_id, str) or len(self.source_state_session_id) > 128:
-            raise ValueError("invalid source_state_session_id")
+        _string(self.source_state_session_id, "source_state_session_id", 128)
         if not isinstance(self.joint_cmd, list) or len(self.joint_cmd) != JOINT_COUNT:
             raise ValueError("expected 31 joint commands")
         for command in self.joint_cmd:
@@ -161,6 +169,8 @@ class LowState_(_Header):
     imu_state: IMUState = field(default_factory=IMUState)
     status: str = "disabled"
     faults: list = field(default_factory=list)
+    accepted_command_seq: int = 0
+    accepted_controller_session: str = ""
 
     @property
     def motor_state(self):
@@ -172,6 +182,8 @@ class LowState_(_Header):
 
     def validate(self):
         self._validate_header()
+        _integer(self.accepted_command_seq, "accepted_command_seq")
+        _string(self.accepted_controller_session, "accepted_controller_session", 128)
         if not isinstance(self.joint_state, list) or len(self.joint_state) != JOINT_COUNT:
             raise ValueError("expected 31 joint states")
         for state in self.joint_state:
@@ -187,9 +199,48 @@ class LowState_(_Header):
             not isinstance(x, str) or len(x) > 1024 for x in self.faults
         ):
             raise ValueError("invalid fault list")
+        for fault in self.faults:
+            _string(fault, "fault", 1024)
 
 
-MESSAGE_TYPES = {"LowCmd_": LowCmd_, "LowState_": LowState_}
+@dataclass
+class ControlRequest_(_Header):
+    request_id: str = ""
+    controller_session: str = ""
+    robot_session: str = ""
+    operation: str = "claim"
+
+    def validate(self):
+        self._validate_header()
+        for name in ("request_id", "controller_session", "robot_session"):
+            _string(getattr(self, name), name, 128, allow_empty=False)
+        if self.operation not in ("claim", "enable", "disable", "release"):
+            raise ValueError("unknown control operation")
+
+
+@dataclass
+class ControlReply_(_Header):
+    request_id: str = ""
+    controller_session: str = ""
+    robot_session: str = ""
+    accepted: bool = False
+    status: str = "rejected"
+    detail: str = ""
+    execution_verified: bool = False
+
+    def validate(self):
+        self._validate_header()
+        for name in ("request_id", "controller_session", "robot_session"):
+            _string(getattr(self, name), name, 128, allow_empty=False)
+        _string(self.status, "control status", 64, allow_empty=False)
+        _string(self.detail, "control detail", 1024)
+        if type(self.accepted) is not bool or type(self.execution_verified) is not bool:
+            raise ValueError("control result flags must be boolean")
+        if self.execution_verified and not self.accepted:
+            raise ValueError("a rejected request cannot have verified execution")
+
+
+MESSAGE_TYPES = {cls.__name__: cls for cls in (LowCmd_, LowState_, ControlRequest_, ControlReply_)}
 
 
 def message_to_dict(message):
@@ -228,7 +279,7 @@ def message_from_dict(envelope):
     try:
         if cls is LowCmd_:
             data["joint_cmd"] = [_construct(JointCmd, x) for x in data["joint_cmd"]]
-        else:
+        elif cls is LowState_:
             data["joint_state"] = [_construct(JointState, x) for x in data["joint_state"]]
             data["imu_state"] = _construct(IMUState, data["imu_state"])
         result = _construct(cls, data)
@@ -243,3 +294,5 @@ MotorState_ = JointState
 IMUState_ = IMUState
 LowCmd = LowCmd_
 LowState = LowState_
+ControlRequest = ControlRequest_
+ControlReply = ControlReply_

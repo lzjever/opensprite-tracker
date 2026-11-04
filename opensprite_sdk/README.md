@@ -4,7 +4,7 @@
 
 这是一套给 OpenSprite 做控制和策略部署的独立子工程。接口沿用 Unitree SDK2 的 `ChannelFactoryInitialize`、`ChannelPublisher`、`ChannelSubscriber`、`LowCmd` 和 `LowState` 使用习惯。相同的关节命令可以接 MuJoCo 仿真或 Jetson 真机后端。
 
-SDK 采用 OpenSprite 自己的31关节顺序和机构映射。`motor_cmd`、`motor_state` 是兼容拼写，内容仍是关节空间；左右脚踝和头部 pitch/roll 的电机转换由后端完成。当前提供进程内和本地 Unix 通信，**不与 Unitree DDS 二进制协议互通，也未提供远程 DDS 通信**。
+SDK 采用 OpenSprite 自己的31关节顺序和机构映射。`motor_cmd`、`motor_state` 是兼容拼写，内容仍是关节空间；左右脚踝和头部 pitch/roll 的电机转换由后端完成。通信支持进程内、本地 Unix 和原生 Fast DDS。ROS 2 消息定义随工程提供；OpenSprite 消息不与 Unitree 机器人的消息布局互换。构建、Topic 和协议说明见 [Fast DDS 与 ROS 2](docs/dds.md)。
 
 控制程序按SDK2习惯异步订阅状态、周期发布命令。`Write()`成功只表示通信层接受消息；慢诊断读者不会拖住发布。命令保留真实来源状态，后端分别检查来源观测和当前执行反馈的新鲜度。软件审查修复见 [修复记录](docs/plan/review-fixes-20261103.md)。
 
@@ -34,6 +34,32 @@ python examples/low_level.py --endpoint /tmp/opensprite-sdk.sock \
 ```
 
 客户端正常结束会请求全身失能，仿真服务确认后退出。仿真在首条命令前暂停物理时间，之后正常执行物理和超时检查。移除 `--gains-profile` 时使用低增益接口演示，不能当作自由站立参数。
+
+## 统一 Fast DDS 执行进程
+
+仿真和真机使用相同的 `LowCmd`、`LowState` 和管理消息。执行进程负责控制权、超时和设备后端；策略进程只读取传感器状态并发送关节目标。先在 SDK 目录构建通信库：
+
+```bash
+sudo apt-get install cmake g++ libfastrtps-dev libfastcdr-dev nlohmann-json3-dev
+bash tools/build_dds.sh
+```
+
+舞蹈 bundle 的导出方法见下文。使用两个终端运行，`--viewer` 打开实时 MuJoCo，不录制视频：
+
+```bash
+# 终端一：机器人执行端，等待控制程序 claim 和 enable。
+MUJOCO_GL=glfw python examples/robot_runtime.py --backend mujoco \
+  --domain 42 --interface lo --bundle outputs/dance-bundle \
+  --enable-sim --duration 240 --viewer
+
+# 终端二：独立策略进程。失败后继续整个参考动作。
+python examples/remote_policy.py --domain 42 --interface lo \
+  --bundle outputs/dance-bundle
+```
+
+无显示器时移除 `--viewer`。Wayland 窗口异常时可加 `PYGLFW_LIBRARY_VARIANT=x11`。硬件端通过 `robot_runtime.py --backend hardware` 连接已经显式启动的原生 CAN/IMU 进程，默认 shadow；本地许可、标定和 profile 检查保留。当前舞蹈 bundle 不能直接用于新版真机上电。
+
+消息包位于 `ros2/opensprite_msgs`。ROS 2 与独立 SDK 使用同一协议，不要求 SDK 运行时安装 ROS 2。完整 Topic、时间和管理应答语义见 [DDS 说明](docs/dds.md)。
 
 ## SDK 调用
 
@@ -71,6 +97,14 @@ python examples/run_policy.py --bundle outputs/dance-bundle \
 
 在当前父项目内，两个输入分别位于 `../artifacts/checkpoints/goal-sim2real_model_024000.pt` 和 `../data/motions/lafan_dance.npz`。这只是导出输入的例子，SDK 运行时不读取父目录。
 
+直接打开实时 MuJoCo 窗口，不录制视频：
+
+```bash
+MUJOCO_GL=glfw python examples/view_policy.py --bundle outputs/dance-bundle
+```
+
+空格暂停或继续，`R` 从首帧开始新一轮，`Esc` 关闭。蓝色半透明模型是参考动作。失败后继续执行策略和物理，并在窗口标注首次失败；完整轨迹结束后保留窗口。`--paused` 可暂停启动。Wayland 桌面若窗口异常，可在命令前加 `PYGLFW_LIBRARY_VARIANT=x11` 使用 Xwayland。
+
 录像示例：
 
 ```bash
@@ -100,6 +134,8 @@ cp config/hardware.jetson.example.json config/hardware.local.json
 
 ## 验证与开发
 
-实施计划、team 交叉审查及实际验收结果分别放在 [docs/plan](docs/plan/implementation.md) 和 [验收记录](docs/validation.md)。软件已验证范围包括真实 CPU MuJoCo、跨进程通信、ONNX 数值对照、完整225.66秒舞蹈、C++ 编译、故障注入和假硬件对端。Jetson ARM64、真实 CAN/IMU 接线、上电和时延尚未实测。
+实施计划、team 交叉审查及实际验收结果放在 [docs/plan](docs/plan/implementation.md) 和 [验收记录](docs/validation.md)。0.2.0通过250项Python测试、3项原生CTest、真实ROS 2双向互通和完整225.66秒DDS舞蹈链路，见 [最新验收](docs/validation-dds-20261104.md)。Jetson ARM64、真实CAN/IMU接线、上电和时延尚未实测。
 
 之后可直接把本目录拆成新仓库。拆分前运行 `python tools/check_standalone.py` 检查发行文件、wheel资产和独立运行。
+
+完整 DDS 验收使用 `python tools/check_dds_acceptance.py --ros2 --output outputs/dds-acceptance/acceptance.json`，其中 ROS 2 测试需要官方容器，见 [验收入口](tools/ros2/README.md)。`python tools/check_standalone.py --dds` 还会搬迁源码、重建通信库并从安装后的 wheel 运行独立双进程仿真。

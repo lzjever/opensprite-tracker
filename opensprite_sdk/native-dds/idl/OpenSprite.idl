@@ -1,0 +1,83 @@
+// Generated from ros2/opensprite_msgs/msg by tools/generate_dds_schema.py.
+// Schema SHA256: c0958d5edbee908782901d0495afb38597f3a7389a97d004f1779c253d5a9d15
+module opensprite_msgs { module msg {
+struct JointCmd {
+  octet mode;
+  double q;
+  double dq;
+  double kp;
+  double kd;
+  double tau;
+};
+struct JointState {
+  double q;
+  double dq;
+  double tau_est;
+  boolean valid;
+  unsigned long long sample_ns;
+  string<16> sample_time_kind;
+  boolean tau_est_valid;
+};
+struct IMUState {
+  double gyroscope[3];
+  double projected_gravity[3];
+  double accelerometer[3];
+  boolean valid;
+  unsigned long long sample_ns;
+  string<16> frame;
+  string<128> attached_link;
+  string<16> sample_time_kind;
+};
+struct LowCmd {
+  string<128> profile_id;
+  unsigned long long joint_order_hash;
+  unsigned long long seq;
+  unsigned long long stamp_ns;
+  string<16> clock_domain;
+  string<128> session_id;
+  JointCmd joint_cmd[31];
+  unsigned long long source_state_seq;
+  string<128> source_state_session_id;
+};
+struct LowState {
+  string<128> profile_id;
+  unsigned long long joint_order_hash;
+  unsigned long long seq;
+  unsigned long long stamp_ns;
+  string<16> clock_domain;
+  string<128> session_id;
+  JointState joint_state[31];
+  IMUState imu_state;
+  string<16> status;
+  sequence<string<1024>, 64> faults;
+  unsigned long long accepted_command_seq;
+  string<128> accepted_controller_session;
+};
+struct ControlRequest {
+  string<128> profile_id;
+  unsigned long long joint_order_hash;
+  unsigned long long seq;
+  unsigned long long stamp_ns;
+  string<16> clock_domain;
+  string<128> session_id;
+  string<128> request_id;
+  string<128> controller_session;
+  string<128> robot_session;
+  string<16> operation;
+};
+struct ControlReply {
+  string<128> profile_id;
+  unsigned long long joint_order_hash;
+  unsigned long long seq;
+  unsigned long long stamp_ns;
+  string<16> clock_domain;
+  string<128> session_id;
+  string<128> request_id;
+  string<128> controller_session;
+  string<128> robot_session;
+  boolean accepted;
+  string<64> status;
+  string<1024> detail;
+  boolean execution_verified;
+};
+}; };

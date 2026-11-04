@@ -1,0 +1,10 @@
+{
+  "generator": "Fast DDS Gen 2.3.0 -typeros2",
+  "idl_sha256": "2f6f3b8a9b67c46b4559509638f6097347b7cea3164b27316316f2ec560e1b92",
+  "files": {
+    "OpenSprite.h": "3e5f3b01b814de3b0abb95d1a8e30288974ce4a390bc905f5045095ddb5191fe",
+    "OpenSprite.cxx": "9032b53fd17b4512a7ecc32cc400f42f074d4d28d74cfa565c5e448dea054352",
+    "OpenSpritePubSubTypes.h": "454ecda9ef60056eeafdeeb6d45c367b832e1445a31bf457f26aec64c1af73fb",
+    "OpenSpritePubSubTypes.cxx": "25f3a80373ae447b443161f2af579d37e69c64de58884b3bbcc5d68eb320d21b"
+  }
+}

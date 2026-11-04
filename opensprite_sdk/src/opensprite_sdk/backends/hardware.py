@@ -9,12 +9,22 @@ from pathlib import Path
 import socket
 import tempfile
 import time
+import threading
+from functools import wraps
 import uuid
 import numpy as np
 from ..constants import JOINT_NAMES, JOINT_ORDER_HASH
 from ..messages import LowCmd_, LowState_, JointState, IMUState
 from .hardware_config import HardwareConfig
 from .native_ipc import StatePacket, decode_icm, fresh, pack_target
+
+
+def _state_synchronized(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._state_lock:
+            return method(self, *args, **kwargs)
+    return locked
 
 
 class HardwareBackend:
@@ -30,12 +40,15 @@ class HardwareBackend:
     def __init__(self,config,*,profile_id='physical_v5',allow_actuation=False,
                  clock=time.monotonic_ns,state_socket=None,imu_socket=None):
         self.config=config if isinstance(config,HardwareConfig) else HardwareConfig.load(config)
+        if profile_id != self.config.data.get('profile_id', 'physical_v5'):
+            raise ValueError('hardware profile must match the native robot configuration')
         self.profile_id=profile_id;self.allow_actuation=allow_actuation;self.clock=clock
         self._state_socket=state_socket;self._imu_socket=imu_socket;self._temporary=None
         self._started=False;self._closed=False;self._enabled=False;self._fault=None
         self._previous_state=0;self._previous_imu=0;self._native_target=0;self._last_command=0
         self._state=None;self._packet=None;self._owner=None;self.session_id=uuid.uuid4().hex
         self._source_states = OrderedDict()
+        self._state_lock = threading.RLock()
 
     def start(self):
         if self._closed:
@@ -93,7 +106,11 @@ class HardwareBackend:
                 max_age_ns=int(data['imu']['max_age_ms']*1e6))
             self._previous_imu=imu.sequence
             q,dq=self.config.joint_state(packet.position,packet.velocity)
-            state=LowState_(profile_id=self.profile_id,seq=packet.sequence,stamp_ns=packet.stamp_ns,
+            # The state combines independently sampled native and IMU data.
+            # Its header is robot-local collection time, which can anchor
+            # remote observation-age checks without comparing machine clocks.
+            # Per-sensor timestamps remain their original measurement times.
+            state=LowState_(profile_id=self.profile_id,seq=packet.sequence,stamp_ns=self.clock(),
                 session_id=self.session_id,clock_domain='monotonic',
                 status='ready' if packet.actuation_allowed else 'shadow')
             for i in range(31):
@@ -104,10 +121,15 @@ class HardwareBackend:
             state.imu_state=IMUState(gyroscope=imu.gyro,projected_gravity=imu.projected_gravity,
                 accelerometer=imu.accelerometer,valid=True,sample_ns=imu.sample_ns,
                 sample_time_kind='host_read',frame='body',attached_link=data['imu']['attached_link'])
-            state.validate();self._state=state;self._packet=packet
-            self._require_fresh_state()
-            self._remember_source(state)
-            return copy.deepcopy(state)
+            state.validate()
+            # Blocking native/IMU acquisition above never holds the command
+            # lock. Commit the matching packet, state and source cache together.
+            with self._state_lock:
+                self._require_open()
+                self._state=state;self._packet=packet
+                self._require_fresh_state()
+                self._remember_source(state)
+                return copy.deepcopy(state)
         except BaseException as error:
             self._fault=str(error);self.close();raise
 
@@ -116,6 +138,7 @@ class HardwareBackend:
             raise RuntimeError('read a fresh joint and IMU state first')
         now=self.clock()
         fresh(self._state.stamp_ns,now,int(self.config.data['controller'].get('native_state_max_age_ms',60)*1e6),'source state')
+        fresh(self._packet.stamp_ns,now,int(self.config.data['controller'].get('native_state_max_age_ms',60)*1e6),'native aggregate state')
         fresh(self._state.imu_state.sample_ns,now,int(self.config.data['imu']['max_age_ms']*1e6),'source IMU')
         ankle_names=set()
         for name in ('left_ankle','right_ankle'):
@@ -161,6 +184,7 @@ class HardwareBackend:
         if self._state_socket.send(payload)!=len(payload):
             raise RuntimeError('short native target IPC write')
 
+    @_state_synchronized
     def enable(self):
         """Explicit permission: release the first zero-gain startup target.
 
@@ -197,6 +221,7 @@ class HardwareBackend:
         """
         return self._accept(command,preview=True)
 
+    @_state_synchronized
     def _accept(self,command,*,preview):
         self._require_open();command.validate()
         if self._packet is None:
@@ -239,6 +264,7 @@ class HardwareBackend:
         # successful disable acknowledgement: inspect the native report on exit.
         self.close()
 
+    @_state_synchronized
     def close(self):
         self._enabled=False;self._closed=True
         self._source_states.clear()

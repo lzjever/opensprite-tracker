@@ -1,4 +1,4 @@
-"""Unitree-style local channels; memory and UNIX transports, not DDS wire compatible.
+"""Unitree-style channels with local transports and typed OpenSprite Fast DDS.
 
 The UNIX broker protocol is SDK-specific JSON over SOCK_SEQPACKET. Its socket
 must never be confused with the official native controller's binary IPC socket.
@@ -88,6 +88,7 @@ class _Factory:
     domain: int = 0
     transport: str = "memory"
     endpoint: str | None = None
+    interface: str | None = None
 
 
 _factory = _Factory()
@@ -98,20 +99,24 @@ _factory_lock = threading.Lock()
 def ChannelFactoryInitialize(domain=0, interface=None, *, transport="memory", endpoint=None):
     """Set defaults for subsequently initialized channels; never opens CAN.
 
-    ``interface`` accepts None/lo for familiar SDK call sites. This local
-    implementation does not configure a DDS network interface.
+    Fast DDS defaults to loopback. Network interfaces must be selected explicitly.
     """
     if type(domain) is not int or domain < 0 or domain > 232:
         raise ValueError("domain must be an integer in 0..232")
-    if interface not in (None, "lo", "localhost"):
+    if transport != "dds" and interface not in (None, "lo", "localhost"):
         raise ValueError("local channels only support the loopback interface")
-    if transport not in ("memory", "unix"):
-        raise ValueError("transport must be memory or unix")
+    if transport not in ("memory", "unix", "dds"):
+        raise ValueError("transport must be memory, unix or dds")
+    if transport == "dds":
+        if endpoint is not None:
+            raise ValueError("DDS selects domain/interface, not a Unix endpoint")
+        if interface is not None and (not isinstance(interface, str) or not interface or len(interface)>128 or "\0" in interface):
+            raise ValueError("invalid DDS interface")
     if transport == "unix" and (not endpoint or not isinstance(endpoint, (str, Path))):
         raise ValueError("unix transport requires an endpoint")
     global _factory
     with _factory_lock:
-        _factory = _Factory(domain, transport, str(endpoint) if endpoint else None)
+        _factory = _Factory(domain, transport, str(endpoint) if endpoint else None, interface)
 
 
 def _config():
@@ -150,6 +155,7 @@ class ChannelPublisher:
         self.topic, self.message_type = topic, message_type
         self._active = False
         self._socket = None
+        self._dds = None
         self._lock = threading.Lock()
         self._sequence = 0
         self._session = uuid.uuid4().hex
@@ -161,6 +167,10 @@ class ChannelPublisher:
             self._config, self._broker = _config()
             if self._config.transport == "memory":
                 self._broker.add_publisher(self.topic, self)
+            elif self._config.transport == "dds":
+                from .dds import DdsEndpoint
+                self._dds = DdsEndpoint(self._config.domain, self._config.interface,
+                    self.topic, self.message_type.__name__, "publisher")
             else:
                 self._socket = _connect(self._config, "publisher", self.topic, self.message_type)
             self._active = True
@@ -187,7 +197,9 @@ class ChannelPublisher:
                 if self._sequence and not state_epoch_changed:
                     raise ValueError("publisher session changed")
                 self._session = outgoing.session_id
-            if self._socket is None:
+            if self._dds is not None:
+                self._dds.write(message_to_dict(outgoing), timeout=timeout)
+            elif self._socket is None:
                 self._broker.publish(self.topic, self, outgoing)
             else:
                 if timeout is not None:
@@ -201,12 +213,34 @@ class ChannelPublisher:
             self._sequence = outgoing.seq
             return True
 
+    def MatchedCount(self):
+        """DDS discovery count, not control ownership or execution confirmation."""
+        endpoint = self._dds
+        if not self._active or endpoint is None:
+            raise RuntimeError("MatchedCount requires an initialized DDS endpoint")
+        return endpoint.matches()
+
+    def WaitForMatch(self, timeout=2.):
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout<0:
+            raise ValueError("invalid match timeout")
+        deadline = time.monotonic()+timeout
+        while True:
+            if self.MatchedCount()>0:
+                return True
+            remaining = deadline-time.monotonic()
+            if remaining<=0:
+                return False
+            time.sleep(min(.01,remaining))
+
     def Close(self):
         with self._lock:
             if not self._active:
                 return
             self._active = False
-            if self._socket is not None:
+            if self._dds is not None:
+                self._dds.close()
+                self._dds = None
+            elif self._socket is not None:
                 self._socket.close()
                 self._socket = None
             else:
@@ -223,6 +257,7 @@ class ChannelSubscriber:
         self._queue = deque(maxlen=1)
         self._active = False
         self._socket = None
+        self._dds = None
         self._threads = []
         self.last_error = None
 
@@ -241,6 +276,11 @@ class ChannelSubscriber:
             if self._config.transport == "memory":
                 with self._broker.lock:
                     self._broker.subscribers.setdefault(self.topic, set()).add(self)
+            elif self._config.transport == "dds":
+                from .dds import DdsEndpoint
+                self._dds = DdsEndpoint(self._config.domain, self._config.interface,
+                    self.topic, self.message_type.__name__, "subscriber")
+                self._start(self._read_dds)
             else:
                 self._socket = _connect(self._config, "subscriber", self.topic, self.message_type)
                 self._socket.settimeout(.1)
@@ -283,6 +323,24 @@ class ChannelSubscriber:
                     self._condition.notify_all()
                 return
 
+    def _read_dds(self):
+        endpoint = self._dds
+        while self._active:
+            try:
+                envelope = endpoint.take(timeout=.1)
+                if envelope is not None:
+                    self._deliver(message_from_dict(envelope))
+            except (OSError, ValueError, RuntimeError) as error:
+                with self._condition:
+                    if self._active:
+                        self.last_error = error
+                    self._active = False
+                    self._condition.notify_all()
+                return
+
+    MatchedCount = ChannelPublisher.MatchedCount
+    WaitForMatch = ChannelPublisher.WaitForMatch
+
     def _dispatch(self):
         while self._active:
             message = self.Read(.1)
@@ -323,6 +381,9 @@ class ChannelSubscriber:
             if thread is not threading.current_thread():
                 thread.join(timeout=1)
         self._threads.clear()
+        if self._dds is not None:
+            self._dds.close()
+            self._dds = None
 
 
 class _OutboundSubscriber:

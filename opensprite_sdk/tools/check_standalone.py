@@ -116,11 +116,46 @@ print(json.dumps(result))
 '''
 
 
-def check(output, *, native=True):
+DDS_SELFTEST = '''import json,pathlib,sys,time
+from opensprite_sdk.client import joint_command
+from opensprite_sdk.core.channel import ChannelFactoryInitialize
+from opensprite_sdk.backends.mujoco import load_profile
+from opensprite_sdk.runtime import ManagementClient
+ChannelFactoryInitialize(218, "lo", transport="dds")
+profile=load_profile()
+with ManagementClient() as robot:
+ state=robot.Read(10.)
+ assert state.clock_domain=="sim"
+ assert robot.request("claim").accepted
+ assert robot.request("enable").execution_verified
+ for i in range(20):
+  target=joint_command(state,profile["default_q"],profile["kp"],profile["kd"])
+  target.seq=i+1
+  robot.Write(target)
+  deadline=time.monotonic()+2.
+  previous=state
+  while True:
+   state=robot.Read(max(.001,deadline-time.monotonic()))
+   assert state.session_id==previous.session_id
+   if (state.stamp_ns>previous.stamp_ns and state.accepted_command_seq>=i+1
+       and state.accepted_controller_session==robot.controller_session): break
+   assert time.monotonic()<deadline,"command acceptance timed out"
+ reply=robot.request("disable")
+ assert reply.accepted and reply.execution_verified
+result={"passed":True,"commands_accepted":state.accepted_command_seq,
+        "simulated_seconds":state.stamp_ns/1e9,"disable_verified":True,
+        "loaded_from_installed_wheel":True,"parent_tracker_import_blocked":True}
+pathlib.Path(sys.argv[1]).write_text(json.dumps(result,indent=2)+"\\n")
+print(json.dumps(result))
+'''
+
+
+def check(output, *, native=True, dds=False):
     report = {"schema": "opensprite-sdk-standalone-acceptance-v1",
               "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "host_architecture": platform.machine(), "jetson_hardware_tested": False,
-              "hardware_interfaces_opened": False, "native_skipped": not native, "passed": False}
+              "hardware_interfaces_opened": False, "native_skipped": not native,
+              "dds_requested":dds, "passed": False}
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     base = ROOT / "outputs/extraction"
@@ -202,6 +237,40 @@ def check(output, *, native=True):
             assert client["commands"]>10 and client["status"]=="disabled"
             report["two_process_example"] = {**client, "server_returncode":rc, "client_returncode":0,
                 "loaded_from_installed_wheel":True, "passed":True}
+        if dds:
+            dds_build, dds_prefix = work/"dds-build", work/"dds-prefix"
+            run([sys.executable, str(source/"tools/generate_dds_schema.py"), "--check"],
+                cwd=work, log=logs/"dds-schema.log")
+            run(["cmake", "-S", str(source/"native-dds"), "-B", str(dds_build),
+                 "-DCMAKE_BUILD_TYPE=Release"], cwd=work, log=logs/"dds-configure.log")
+            run(["cmake", "--build", str(dds_build), "--parallel", "2"],
+                cwd=work, log=logs/"dds-build.log")
+            run(["cmake", "--install", str(dds_build), "--prefix", str(dds_prefix)],
+                cwd=work, log=logs/"dds-install.log")
+            dds_env = dict(env, OPENSPRITE_DDS_LIBRARY=str(dds_prefix/"lib/libopensprite_dds.so"))
+            dds_selftest = work/"dds-selftest.py"
+            dds_selftest.write_text(DDS_SELFTEST)
+            dds_result = work/"installed-dds.json"
+            dds_runtime_result = work/"installed-dds-runtime.json"
+            with (logs/"dds-runtime.log").open("w") as stream:
+                server = subprocess.Popen(prefix+[str(source/"examples/robot_runtime.py"),
+                    "--transport", "dds", "--domain", "218", "--interface", "lo",
+                    "--enable-sim", "--duration", "15", "--output", str(dds_runtime_result)],
+                    cwd=work, env=dds_env, stdout=stream, stderr=subprocess.STDOUT)
+                try:
+                    run(prefix+[str(dds_selftest), str(dds_result)], cwd=work,
+                        env=dds_env, log=logs/"dds-client.log", timeout=20)
+                    rc = server.wait(timeout=5)
+                    if rc:
+                        raise RuntimeError(f"installed DDS runtime failed; see {logs/'dds-runtime.log'}")
+                finally:
+                    if server.poll() is None:
+                        server.terminate()
+                        server.wait(timeout=5)
+            report["relocated_dds"] = {**json.loads(dds_result.read_text()),
+                "runtime":json.loads(dds_runtime_result.read_text()),
+                "library":str(dds_prefix/"lib/libopensprite_dds.so"),
+                "built_from_relocated_source":True}
         if native:
             if shutil.which("cmake"):
                 build = work/"native-build"
@@ -227,5 +296,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT/"outputs/acceptance/standalone.json")
     parser.add_argument("--skip-native", action="store_true")
+    parser.add_argument("--dds", action="store_true", help="also build/install and test real DDS")
     args = parser.parse_args()
-    print(json.dumps(check(args.output, native=not args.skip_native), indent=2))
+    print(json.dumps(check(args.output, native=not args.skip_native, dds=args.dds), indent=2))

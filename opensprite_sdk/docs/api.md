@@ -1,6 +1,6 @@
 # 接口与时间契约
 
-SDK 提供 Python 客户端和 Linux 原生执行层。`ChannelFactoryInitialize(domain, interface=None, transport="memory"|"unix", endpoint=...)` 选择本地通信域；同一进程内配置一次后再创建各通道。当前不提供 DDS 网络发现、ROS2 或 G1 二进制消息兼容。
+SDK 提供 Python 客户端和 Linux 原生执行层。`ChannelFactoryInitialize(domain, interface=None, transport="memory"|"unix"|"dds", endpoint=...)` 选择通信方式；同一进程内配置一次后再创建各通道。DDS 使用 domain/interface，Unix 使用 endpoint。原生 DDS 和 ROS 2 使用本工程的 OpenSprite 消息，见 [DDS 协议](dds.md)。
 
 ```python
 from opensprite_sdk.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
@@ -32,6 +32,9 @@ Unix发布沿用SDK2中“写入通信层”和“消费者执行”分开的习
 | `LowState_.imu_state` | gyro、估计单位重力、加速度、附着link、读取时刻、有效性 |
 | 消息头 | `profile_id,joint_order_hash,seq,stamp_ns,clock_domain,session_id` |
 | 命令来源 | `source_state_seq,source_state_session_id`，必须引用后端提供的新鲜状态 |
+| 命令接受关联 | `LowState.accepted_command_seq,accepted_controller_session`，统一runtime成功提交到后端的命令；不是电机实测执行回执 |
+| 管理请求 | `ControlRequest` 的 request ID、controller session、robot session 和 claim/enable/disable/release 操作 |
+| 管理应答 | `ControlReply.accepted,status,detail,execution_verified`，区分请求接受与执行验证 |
 
 `motor_cmd/motor_state` 是对应关节数组的别名，不能按CAN枚举顺序解释。公共指令始终以 `constants.JOINT_NAMES` 为序。物理驱动顺序及其hash仅属于硬件后端。
 
@@ -47,9 +50,11 @@ MuJoCo与主机脚踝PD对完整关节力矩做饱和。其他电机保留内置
 
 加速仿真采用 `clock_domain="sim"`；硬件使用同主机monotonic时钟。时间戳不可跨时钟域比较。IMU和电机保留各自时间来源：`simulation`、`host_receive`、`host_read` 或 `unknown`。新聚合包不会刷新旧传感器的时间。
 
+硬件 `LowState.stamp_ns` 是机器人完成关节与IMU观测汇合的时刻，能够覆盖稍晚取得的IMU样本；原生状态包的时间另在后端校验。各传感器 `sample_ns` 保持原值。远程策略以机器人消息头时刻判断样本相对年龄，执行端再以自身当前时钟校验真实新鲜度。
+
 硬件后端缓存最多64份已发布来源快照。异步命令可以引用仍新鲜的上一帧，实际来源序号保持不变，不会在发送时改成最新帧。来源关节/IMU分别检查60ms/30ms；当前执行反馈另按脚踝10ms、其他电机60ms、IMU30ms检查。未知、过期、未来或其他session的来源都会被拒绝。公开可变消息不是缓存的权威副本。
 
-每个topic只能有一个publisher，后端进一步锁定controller session并拒绝重放。单个私有Unix socket不是跨用户身份认证系统；真实部署使用受控目录。原生CAN进程另有主机级独占锁。SDK不会修改网口、驱动权限或启动系统服务。
+本地传输每个topic只能有一个publisher；DDS允许多个writer，统一执行层显式分配控制权，后端锁定controller session并拒绝重放。session字符串不是身份认证。单个私有Unix socket也不是跨用户身份认证系统；部署使用受控目录和网络。原生CAN进程另有主机级独占锁。SDK不会修改网口、驱动权限或启动系统服务。
 
 仿真和硬件的 `enable()` 都是显式生命周期操作。`Write` 不隐式使能。正常仿真失能能返回状态确认；真实硬件关闭IPC走原生失能路径，最终结果以原生报告为准。
 

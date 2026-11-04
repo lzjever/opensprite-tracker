@@ -10,6 +10,7 @@
 | SDK2 Python接口参考 | [unitree_sdk2_python](https://github.com/unitreerobotics/unitree_sdk2_python/tree/814556d15970dd2ecf1c9984e845ca02ab07e206) | BSD-3-Clause；参考checkout仅位于忽略的`.reference/`，不作为发行依赖 |
 | SDK2 C++接口参考 | [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2/tree/8e1b927586712edd6a4c29d50dd52dff1e163439) | BSD-3-Clause；不随子工程分发参考checkout |
 | MuJoCo桥接结构参考 | [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco/tree/1eb6642e3f3fdfb7fb13a9794fd6a2dd93ea0e7d) | BSD-3-Clause；不随子工程分发参考checkout |
+| DDS生成代码 | [Fast DDS Gen 2.3.0](https://github.com/eProsima/Fast-DDS-Gen/tree/v2.3.0) | Apache-2.0；生成文件保留原始声明，全文见`licenses/Apache-2.0.txt` |
 
 策略导出器按公开SuperMimic方法的现有训练契约实现ELU编码器/解码器和冻结归一化。相关MIT算法声明保留在 `licenses/algorithm-MIT.txt`。导出checkpoint和动作由使用者显式提供，生成bundle继承其权重和数据许可；本SDK发行目录不包含LAFAN原始数据或舞蹈模型权重。
 
