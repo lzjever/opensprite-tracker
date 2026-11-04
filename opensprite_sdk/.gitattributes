@@ -1,2 +1,4 @@
 # Preserve upstream driver text byte-for-byte, including its comment whitespace.
 native/third_party/** whitespace=-blank-at-eol
+# Preserve generated code exactly so its recorded generator hashes remain valid.
+native-dds/generated/** whitespace=-blank-at-eol,-blank-at-eof
