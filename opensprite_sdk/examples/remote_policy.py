@@ -14,9 +14,10 @@ from opensprite_sdk.policy import PolicyBundle
 from opensprite_sdk.runtime import ManagementClient
 
 
-def next_state(client, previous, *, timeout=1.):
-    """Ignore idle discovery packets and require actual robot-time progress."""
+def next_state(client, previous, *, timeout=1., target_stamp_ns=None):
+    """Select the next50Hz observation from a faster robot state stream."""
     deadline = time.monotonic()+timeout
+    target_stamp_ns = previous.stamp_ns+20_000_000 if target_stamp_ns is None else target_stamp_ns
     while True:
         remaining = deadline-time.monotonic()
         if remaining <= 0:
@@ -25,11 +26,11 @@ def next_state(client, previous, *, timeout=1.):
         if state.session_id != previous.session_id or state.clock_domain != previous.clock_domain:
             raise RuntimeError("robot session/clock changed; explicit policy restart required")
         if state.seq > previous.seq and state.stamp_ns > previous.stamp_ns:
-            delta = state.stamp_ns-previous.stamp_ns
-            if state.clock_domain == "sim" and delta != 20_000_000:
+            if state.stamp_ns < target_stamp_ns:
+                continue
+            if state.clock_domain == "sim" and state.stamp_ns != target_stamp_ns:
                 raise RuntimeError("missed policy observation / simulation phase drift; expected20ms")
-            if state.clock_domain == "monotonic" and (
-                    state.seq != previous.seq+1 or delta > 40_000_000):
+            if state.clock_domain == "monotonic" and state.stamp_ns-target_stamp_ns > 10_000_000:
                 raise RuntimeError("missed native observation / hardware policy deadline")
             return state
 
@@ -47,7 +48,7 @@ def run(args):
     frames = 0
     enabled = False
     disable_reply = None
-    with ManagementClient(controller_session=bundle.session_id) as client:
+    with ManagementClient(controller_session=bundle.session_id,state_queue_len=64) as client:
         first = client.Read(timeout=10.)
         if first.profile_id != bundle.contract["profile_id"]:
             raise ValueError("policy/robot profile mismatch")
@@ -64,6 +65,7 @@ def run(args):
             client.request("enable")
             enabled = True
             state = client.Read(timeout=3.)
+            reference_start_stamp = state.stamp_ns
             for frame in range(transitions):
                 # Sensor stamps belong to the backend clock. Never compare
                 # remote robot monotonic time with this machine's monotonic.
@@ -71,7 +73,8 @@ def run(args):
                 client.Write(command)
                 frames += 1
                 if frame+1 < transitions:
-                    state = next_state(client, state)
+                    state = next_state(client, state,
+                        target_stamp_ns=reference_start_stamp+(frame+1)*20_000_000)
             # Backend acceptance is explicit, and simulation must also finish
             # the last20ms policy window. This is never a measured-motor ACK.
             deadline = time.monotonic()+1.

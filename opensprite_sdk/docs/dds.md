@@ -43,7 +43,9 @@ finally:
 
 DDS 类型名采用 ROS 2 的 `opensprite_msgs::msg::dds_::<消息名>_`。消息包可以由 colcon 单独构建。关节、IMU、时间和 source session 的含义见 [接口契约](api.md)。字符串上限按 UTF-8 字节检查。
 
-高频命令和状态使用 BEST_EFFORT、VOLATILE、KEEP_LAST(1)，控制程序持续发送新目标。管理请求和应答使用有界 RELIABLE 队列与有限写入等待。管理操作有本地超时和重试期限。
+高频命令和状态写端使用BEST_EFFORT、VOLATILE、KEEP_LAST(1)，默认读端也保留最新一条。需要按时间选取真实样本的客户端可用 `ChannelSubscriber.Init(queueLen=64)` 或 `ManagementClient(state_queue_len=64)` 显式保留有界FIFO，原生DDS接收历史最多64条。它不恢复真实丢包，不改写采样时间，不放宽来源年龄或watchdog。管理请求和应答采用有界RELIABLE传输及有限等待。
+
+显式历史模式关闭读端Data-sharing，使接收端持有独立副本。Fast DDS共享交付会让有效读历史受写端历史深度限制，详见[官方说明](https://fast-dds.docs.eprosima.com/en/2.6.x/fastdds/transport/datasharing.html)。默认latest1模式保持原有行为。
 
 ## 执行端边界
 

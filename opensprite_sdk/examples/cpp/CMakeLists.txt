@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(opensprite_cpp_examples LANGUAGES CXX)
+find_package(OpenSpriteSDK CONFIG REQUIRED)
+add_executable(opensprite_low_level low_level.cpp)
+target_link_libraries(opensprite_low_level PRIVATE OpenSpriteSDK::dds)
+target_compile_options(opensprite_low_level PRIVATE -Wall -Wextra -Wpedantic -Werror)

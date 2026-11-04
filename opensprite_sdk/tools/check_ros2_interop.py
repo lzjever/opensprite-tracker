@@ -92,7 +92,7 @@ def check(args):
               "native_received": {}, "matched_peak": {}, "hardware_accessed": False}
     instance = uuid.uuid4().hex[:12]
     containers = ("opensprite-sdk-msgs-" + instance, "opensprite-sdk-peer-" + instance)
-    endpoints, peer = [], None
+    endpoints, peer, cpp_peer = [], None, None
     try:
         image = subprocess.run(["docker", "image", "inspect", args.image,
             "--format", "{{.Id}}"], check=True, capture_output=True, text=True)
@@ -107,13 +107,20 @@ def check(args):
             subprocess.run(build, check=True, stdout=log, stderr=subprocess.STDOUT, timeout=180)
         prefix = "opensprite_acceptance_" + uuid.uuid4().hex[:10]
         writers, readers = {}, {}
-        for name in NAMES:
-            writers[name] = DdsEndpoint(args.domain, args.interface,
-                f"rt/{prefix}/native/{name}", name + "_", "publisher")
-            endpoints.append(writers[name])
-            readers[name] = DdsEndpoint(args.domain, args.interface,
-                f"rt/{prefix}/ros/{name}", name + "_", "subscriber")
-            endpoints.append(readers[name])
+        if getattr(args, "cpp_peer", None):
+            if args.interface not in ("lo", "localhost", "127.0.0.1"):
+                raise ValueError("installed C++ acceptance peer uses loopback")
+            report["native_mode"] = "installed_typed_cpp_roundtrip"
+            report["cpp_peer_binary"] = str(args.cpp_peer.resolve())
+        else:
+            report["native_mode"] = "python_ctypes_native_dds"
+            for name in NAMES:
+                writers[name] = DdsEndpoint(args.domain, args.interface,
+                    f"rt/{prefix}/native/{name}", name + "_", "publisher")
+                endpoints.append(writers[name])
+                readers[name] = DdsEndpoint(args.domain, args.interface,
+                    f"rt/{prefix}/ros/{name}", name + "_", "subscriber")
+                endpoints.append(readers[name])
         peer_command = docker_arguments(args, work, network="host") + [
             "--name", containers[1],
             "-e", f"ROS_DOMAIN_ID={args.domain}", "-e", "RMW_IMPLEMENTATION=rmw_fastrtps_cpp",
@@ -124,9 +131,15 @@ def check(args):
             f"--output /ws/peer-result.json --prefix {prefix} --duration 15"]
         with (work / "peer.log").open("w") as log:
             peer = subprocess.Popen(peer_command, stdout=log, stderr=subprocess.STDOUT)
+            if getattr(args, "cpp_peer", None):
+                # This separately compiled executable imports only the public
+                # installed C++ SDK. Its data path does not use this script's
+                # Python DDS adapter or a JSON ABI.
+                cpp_peer = subprocess.Popen([str(args.cpp_peer.resolve()), str(args.domain),
+                    prefix, "ros-echo"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             deadline = time.monotonic() + 25
             while time.monotonic() < deadline:
-                for name in NAMES:
+                for name in writers:
                     peak = report["matched_peak"].setdefault(name, {"writer": 0, "reader": 0})
                     peak["writer"] = max(peak["writer"], writers[name].matches())
                     peak["reader"] = max(peak["reader"], readers[name].matches())
@@ -136,6 +149,8 @@ def check(args):
                         report["native_received"][name] = incoming
                         if incoming != expected[name]:
                             raise AssertionError(f"ROS2→native field mismatch: {name}")
+                if cpp_peer is not None and cpp_peer.poll() not in (None, 0):
+                    raise RuntimeError(f"typed C++ peer failed: {cpp_peer.stderr.read()}")
                 if peer.poll() is not None:
                     break
                 time.sleep(.025)
@@ -143,15 +158,38 @@ def check(args):
         report["peer_exit_code"] = peer.returncode
         report["ros2_received"] = json.loads((work / "peer-result.json").read_text())
         report["matched_at_end"] = {name: {"writer": writers[name].matches(),
-                                    "reader": readers[name].matches()} for name in NAMES}
+                                    "reader": readers[name].matches()} for name in writers}
+        if cpp_peer is not None:
+            stdout, stderr = cpp_peer.communicate(timeout=3)
+            report["cpp_peer_exit_code"] = cpp_peer.returncode
+            report["cpp_peer_stdout"] = stdout
+            report["cpp_peer_stderr"] = stderr
+            lines = [line for line in stdout.splitlines() if line.startswith("{")]
+            result = json.loads(lines[-1]) if lines else {}
+            native_passed = cpp_peer.returncode == 0 and result.get("passed") is True and result.get("message_types") == 4
+        else:
+            native_passed = set(report["native_received"]) == set(NAMES)
         report["passed"] = (peer.returncode == 0 and report["ros2_received"]["passed"]
-            and set(report["native_received"]) == set(NAMES))
+            and native_passed)
         if not report["passed"]:
             raise AssertionError("bidirectional ROS2/native DDS acceptance failed")
     except Exception as error:
         report["error"] = f"{type(error).__name__}: {error}"
         raise
     finally:
+        if cpp_peer is not None:
+            if cpp_peer.poll() is None:
+                try:
+                    cpp_peer.terminate()
+                    cpp_peer.wait(timeout=3)
+                except ProcessLookupError:
+                    pass
+                except subprocess.TimeoutExpired:
+                    cpp_peer.kill()
+                    cpp_peer.wait(timeout=3)
+            for stream in (cpp_peer.stdout, cpp_peer.stderr):
+                if stream is not None:
+                    stream.close()
         if peer is not None and peer.poll() is None:
             peer.terminate()
             try:
@@ -180,11 +218,13 @@ if __name__ == "__main__":
     parser.add_argument("--image", default="ros:humble-ros-base")
     parser.add_argument("--domain", type=int, default=173)
     parser.add_argument("--interface", default="lo")
+    parser.add_argument("--cpp-peer", type=Path,
+        help="independently compiled tests/native_sdk/typed_peer executable")
     args = parser.parse_args()
     if not 0 <= args.domain <= 232:
         parser.error("domain must be in 0..232")
     result = check(args)
     print(json.dumps({"passed": result["passed"], "report": str(args.output.resolve()),
-                      "native_types": list(result["native_received"]),
+                      "native_types": (list(NAMES) if args.cpp_peer else list(result["native_received"])),
                       "ros2_counts": result["ros2_received"]["counts"],
                       "matched_peak": result["matched_peak"]}, indent=2))

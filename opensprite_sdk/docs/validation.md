@@ -1,6 +1,6 @@
 # 软件验收记录
 
-0.2.0 的统一DDS执行层、ROS 2互通和独立发行结果见 [最新验收](validation-dds-20261104.md)。
+0.3.0的原生运控、C++ SDK、500Hz命令与200Hz物理结果见 [最新验收](validation-native-20261104.md)。0.2.0记录见 [DDS验收](validation-dds-20261104.md)。
 
 2026-11-03，Linux x86_64开发机。所有验证在CPU上执行，未访问电机、CAN或IMU设备。没有更改tracker训练配置。
 

@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(fastrtps 2.6)
+find_dependency(fastcdr)
+find_dependency(Threads)
+include("${CMAKE_CURRENT_LIST_DIR}/OpenSpriteSDKTargets.cmake")
+check_required_components(OpenSpriteSDK)

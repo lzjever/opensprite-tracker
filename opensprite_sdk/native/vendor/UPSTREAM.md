@@ -27,3 +27,17 @@ loops have an explicit per-call frame budget and fail real I/O errors instead of
 spinning indefinitely. A fault remains a failed report even when reachable motors
 have been successfully disabled. Native IPC accepts bounded historical source
 states and rejects zero/unknown and future source sequences.
+
+All31 motors now transmit and poll at500Hz, balanced across four500us slots;
+native state publication is500Hz. Non-ankle targets refresh every2ms as well.
+Published source sequences are checked against an emitted64-snapshot/time cache
+with a60ms source limit, rather than a frequency-dependent frame difference.
+The first target has a bounded3s startup window; active target watchdog remains
+100ms. Reports measure held-target freshness coverage independently of the
+upper controller's message rate.
+
+Before CAN sockets are opened, read-only rtnetlink checks require physical UP
+CAN FD links in normal transmit mode and a conservative request/response wire
+budget below80percent, including worst-slot bursts. The model assumes standard
+ID8-byte FD+BRS frames with64arbitration-rate bits and128data-rate bits perframe.
+It is not a measured adapter/USB latency or hard real-time guarantee.

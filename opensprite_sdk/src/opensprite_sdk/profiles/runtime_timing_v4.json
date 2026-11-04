@@ -1,9 +1,9 @@
 {
   "schema": "opensprite_sdk_sim_profile_v1",
   "profile_id": "runtime_timing_v4",
-  "description": "Experimental 500 Hz physics and pelvis IMU on unchanged v4 rigid bodies and effort limits. Does not represent the revised J4340P hardware or its CAD inertia.",
+  "description": "200Hz physics and separate500Hz joint command dispatch, with pelvis IMU on unchanged v4 rigid bodies. Does not represent revised shoulder CAD inertia or hardware qualification.",
   "robot_model": "assets/robot/opensprite.xml",
-  "physics_dt": 0.002,
+  "physics_dt": 0.005,
   "policy_dt": 0.02,
   "solver_iterations": 50,
   "solver_ls_iterations": 25,
@@ -284,5 +284,6 @@
   "maximum_source_state_age_seconds": 0.1,
   "maximum_kp": 500.0,
   "maximum_kd": 20.0,
-  "initial_root_height": 0.4622457609
+  "initial_root_height": 0.4622457609,
+  "joint_command_dt": 0.002
 }

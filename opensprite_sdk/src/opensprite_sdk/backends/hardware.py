@@ -98,7 +98,7 @@ class HardwareBackend:
             for key in ('left_ankle','right_ankle'):
                 ankle_names.update(data['differentials'][key]['motor_names'])
             for name,stamp in zip(self.config.motor_names,packet.host_receive_ns):
-                fresh(stamp,now,10_000_000 if name in ankle_names else 60_000_000,name)
+                fresh(stamp,now,10_000_000,name)
             if self._imu_socket.send(b'GETIMU01')!=8:
                 raise RuntimeError('short ICM IPC request')
             imu=decode_icm(self._imu_socket.recv(193),now=self.clock(),
@@ -144,7 +144,7 @@ class HardwareBackend:
         for name in ('left_ankle','right_ankle'):
             ankle_names.update(self.config.data['differentials'][name]['motor_names'])
         for name,stamp in zip(self.config.motor_names,self._packet.host_receive_ns):
-            fresh(stamp,now,10_000_000 if name in ankle_names else 60_000_000,name)
+            fresh(stamp,now,10_000_000,name)
 
     def _remember_source(self, state):
         # Public callers receive mutable SDK messages. Never use their copy as

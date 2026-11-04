@@ -14,7 +14,7 @@ SPEC.loader.exec_module(CHECK)
 @pytest.mark.parametrize("name",[
     "config/hardware.local.json", "config/review-check.local.json",
     "some-prefix/config/hardware.local.json", ".reference/repo/README.md",
-    "outputs/extraction/calibration.json", ".venv/lib/module.py",
+    "outputs/extraction/calibration.json", ".venv/lib/module.py", "native-runtime/build-hardware/CMakeCache.txt",
 ])
 def test_private_inputs_never_enter_relocated_distribution(name):
     assert CHECK.excluded(Path(name))

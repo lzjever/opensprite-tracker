@@ -279,7 +279,8 @@ class ChannelSubscriber:
             elif self._config.transport == "dds":
                 from .dds import DdsEndpoint
                 self._dds = DdsEndpoint(self._config.domain, self._config.interface,
-                    self.topic, self.message_type.__name__, "subscriber")
+                    self.topic, self.message_type.__name__, "subscriber",
+                    history_depth=min(queueLen,64))
                 self._start(self._read_dds)
             else:
                 self._socket = _connect(self._config, "subscriber", self.topic, self.message_type)

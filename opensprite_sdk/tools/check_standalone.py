@@ -22,7 +22,7 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED = {".reference", ".venv", "outputs", "build", "dist", "__pycache__", ".pytest_cache", ".git", ".cache"}
+EXCLUDED = {".reference", ".venv", "outputs", "build", "build-hardware", "dist", "__pycache__", ".pytest_cache", ".git", ".cache"}
 
 
 def excluded(path):
@@ -123,7 +123,7 @@ from opensprite_sdk.backends.mujoco import load_profile
 from opensprite_sdk.runtime import ManagementClient
 ChannelFactoryInitialize(218, "lo", transport="dds")
 profile=load_profile()
-with ManagementClient() as robot:
+with ManagementClient(state_queue_len=64) as robot:
  state=robot.Read(10.)
  assert state.clock_domain=="sim"
  assert robot.request("claim").accepted
@@ -137,7 +137,7 @@ with ManagementClient() as robot:
   while True:
    state=robot.Read(max(.001,deadline-time.monotonic()))
    assert state.session_id==previous.session_id
-   if (state.stamp_ns>previous.stamp_ns and state.accepted_command_seq>=i+1
+   if (state.stamp_ns>previous.stamp_ns and state.stamp_ns>=(i+1)*20_000_000 and state.accepted_command_seq>=i+1
        and state.accepted_controller_session==robot.controller_session): break
    assert time.monotonic()<deadline,"command acceptance timed out"
  reply=robot.request("disable")
@@ -150,12 +150,13 @@ print(json.dumps(result))
 '''
 
 
-def check(output, *, native=True, dds=False):
+def check(output, *, native=True, dds=False, robot=False):
+    dds = dds or robot
     report = {"schema": "opensprite-sdk-standalone-acceptance-v1",
               "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "host_architecture": platform.machine(), "jetson_hardware_tested": False,
               "hardware_interfaces_opened": False, "native_skipped": not native,
-              "dds_requested":dds, "passed": False}
+              "dds_requested":dds, "native_robot_requested":robot,"passed": False}
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     base = ROOT / "outputs/extraction"
@@ -271,6 +272,49 @@ def check(output, *, native=True, dds=False):
                 "runtime":json.loads(dds_runtime_result.read_text()),
                 "library":str(dds_prefix/"lib/libopensprite_dds.so"),
                 "built_from_relocated_source":True}
+        if robot:
+            import mujoco
+            robot_build=work/"robot-build"
+            run(["cmake","-S",str(source/"native-runtime"),"-B",str(robot_build),
+                 "-DCMAKE_BUILD_TYPE=Release",
+                 "-DMUJOCO_ROOT="+str(Path(mujoco.__file__).parent)],
+                cwd=work,log=logs/"robot-configure.log")
+            run(["cmake","--build",str(robot_build),"--parallel","2"],
+                cwd=work,log=logs/"robot-build.log")
+            run(["cmake","--install",str(robot_build),"--prefix",str(dds_prefix)],
+                cwd=work,log=logs/"robot-install.log")
+            scene=work/"scene"
+            run(prefix+[str(source/"tools/prepare_sim_scene.py"),"--output",str(scene)],
+                cwd=work,env=dds_env,log=logs/"robot-scene.log")
+            installed_robot=dds_prefix/"bin/opensprite_robot"
+            runtime_result=work/"installed-native-robot.json"
+            installed_result=work/"installed-native-client.json"
+            native_env=dict(dds_env)
+            native_env.pop("LD_LIBRARY_PATH",None)
+            linkage=subprocess.check_output(["ldd",str(installed_robot)],env=native_env,text=True)
+            if "not found" in linkage or any(x in linkage.lower() for x in ("libpython","onnxruntime")):
+                raise RuntimeError("installed native robot dependency failure")
+            with (logs/"robot-runtime.log").open("w") as stream:
+                server=subprocess.Popen([str(installed_robot),"--config",str(scene/"scene.json"),
+                    "--domain","218","--allow-enable","--duration","15","--report",str(runtime_result)],
+                    cwd=work,env=native_env,stdout=stream,stderr=subprocess.STDOUT)
+                try:
+                    run(prefix+[str(dds_selftest),str(installed_result)],cwd=work,
+                        env=native_env,log=logs/"robot-client.log",timeout=20)
+                    rc=server.wait(timeout=5)
+                    if rc:raise RuntimeError("installed native robot failed")
+                finally:
+                    if server.poll() is None:
+                        server.terminate();server.wait(timeout=5)
+            runtime_result=json.loads(runtime_result.read_text())
+            if (runtime_result["fault"] is not None or runtime_result["execution_hz"]!=500
+                or runtime_result["physics_hz"]!=200 or runtime_result["physics_steps"]!=80
+                or not 200<=runtime_result["execution_ticks"]<=202):
+                raise RuntimeError("installed native robot two-clock acceptance failed")
+            report["relocated_native_robot"]={"passed":True,"built_from_relocated_source":True,
+                "runtime":runtime_result,"client":json.loads(installed_result.read_text()),
+                "native_has_python_or_onnx_dependency":False,"native_linkage":linkage,
+                "native_ld_library_path_unset":True,"scene_is_actor_free":True}
         if native:
             if shutil.which("cmake"):
                 build = work/"native-build"
@@ -297,5 +341,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=ROOT/"outputs/acceptance/standalone.json")
     parser.add_argument("--skip-native", action="store_true")
     parser.add_argument("--dds", action="store_true", help="also build/install and test real DDS")
+    parser.add_argument("--robot", action="store_true",help="also relocate/install native robot with200Hz physics/500Hz commands")
     args = parser.parse_args()
-    print(json.dumps(check(args.output, native=not args.skip_native, dds=args.dds), indent=2))
+    print(json.dumps(check(args.output, native=not args.skip_native, dds=args.dds,robot=args.robot), indent=2))

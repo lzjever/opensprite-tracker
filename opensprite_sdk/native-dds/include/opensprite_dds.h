@@ -10,6 +10,10 @@ const char* osdds_error(void);
 /* interface: existing IPv4 interface/address; NULL selects loopback. */
 void* osdds_open(unsigned domain, const char* interface, const char* topic,
                  const char* message_type, const char* role);
+/* Explicit bounded receive history. Legacy osdds_open keeps depth1. Publishers
+ * require depth1; subscribers accept1..64. This does not change writer QoS. */
+void* osdds_open_with_history(unsigned domain, const char* interface, const char* topic,
+                 const char* message_type, const char* role, unsigned reader_history);
 /* Local ABI uses SDK JSON envelopes; DDS itself carries generated typed CDR. */
 int osdds_write(void* handle, const char* payload, size_t size);
 /* Returns JSON byte count, 0 for no sample, -1 for error. timeout_ms <= 10000. */

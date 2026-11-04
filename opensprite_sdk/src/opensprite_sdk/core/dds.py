@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import threading
 import sys
+import time
 
 _library_lock = threading.Lock()
 _libraries = {}
@@ -40,6 +41,9 @@ def _library():
             lib.osdds_open.argtypes = [ctypes.c_uint, ctypes.c_char_p, ctypes.c_char_p,
                                       ctypes.c_char_p, ctypes.c_char_p]
             lib.osdds_open.restype = ctypes.c_void_p
+            if hasattr(lib, "osdds_open_with_history"):
+                lib.osdds_open_with_history.argtypes = lib.osdds_open.argtypes+[ctypes.c_uint]
+                lib.osdds_open_with_history.restype = ctypes.c_void_p
             lib.osdds_write.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
             lib.osdds_write.restype = ctypes.c_int
             lib.osdds_take.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint]
@@ -65,22 +69,39 @@ class DdsEndpoint:
     Command/state: best effort, keep last one, volatile. Lifecycle messages:
     reliable, keep last one, volatile, maximum native write blocking 10ms.
     Matching is observable; accepting a write does not acknowledge execution.
+    An explicit history_depth retains at most64 real received samples; the
+    default remains one and sender history is unchanged. Buffered readers use
+    independent transport copies rather than writer-coupled Data-sharing loans.
     """
 
-    def __init__(self, domain, interface, topic, message_type, role):
+    def __init__(self, domain, interface, topic, message_type, role, *, history_depth=1):
         if type(domain) is not int or not 0 <= domain <= 232:
             raise ValueError("DDS domain must be an integer in 0..232")
         if message_type not in ("LowCmd_", "LowState_", "ControlRequest_", "ControlReply_"):
             raise ValueError("unsupported DDS message type")
         if role not in ("publisher", "subscriber"):
             raise ValueError("invalid DDS endpoint role")
+        if type(history_depth) is not int or not 1 <= history_depth <= 64:
+            raise ValueError("DDS reader history must be in1..64")
+        if role == "publisher" and history_depth != 1:
+            raise ValueError("DDS publisher history remains one")
         values = [interface or "lo", topic, message_type, role]
         if any(not isinstance(v, str) or not v or "\0" in v or len(v.encode("utf8")) > 128 for v in values):
             raise ValueError("invalid DDS endpoint string")
         self._lib = _library()
         self._lifetime = threading.Condition()
         self._inflight = 0
-        self._handle = self._lib.osdds_open(domain, *(v.encode("utf8") for v in values))
+        self._take_lock = threading.Lock()
+        # One bounded native receive allocation per reader, not per sensor
+        # sample. Publisher endpoints never need a receive buffer.
+        self._receive_buffer = ctypes.create_string_buffer(1048576) if role == "subscriber" else None
+        encoded = [v.encode("utf8") for v in values]
+        if history_depth == 1:
+            self._handle = self._lib.osdds_open(domain, *encoded)
+        else:
+            if not hasattr(self._lib, "osdds_open_with_history"):
+                raise RuntimeError("native DDS adapter lacks bounded history; rebuild with tools/build_dds.sh")
+            self._handle = self._lib.osdds_open_with_history(domain, *encoded, history_depth)
         if not self._handle:
             raise RuntimeError(self._error())
         self._role = role
@@ -116,12 +137,28 @@ class DdsEndpoint:
 
     def take(self, timeout=.1):
         milliseconds = _timeout(timeout)
-        with self._using() as handle:
-            buffer = ctypes.create_string_buffer(1048576)
-            size = self._lib.osdds_take(handle, buffer, len(buffer), milliseconds)
-            if size < 0:
-                raise RuntimeError(self._error())
-            return json.loads(buffer.raw[:size]) if size else None
+        if self._role != "subscriber":
+            raise RuntimeError("DDS endpoint is not a subscriber")
+        deadline = time.monotonic()+milliseconds/1000.
+        acquired = (self._take_lock.acquire(timeout=milliseconds/1000.) if milliseconds
+                    else self._take_lock.acquire(blocking=False))
+        if not acquired:
+            return None
+        try:
+            # The buffer is shared only by take calls. Lifetime/matches remain
+            # independent, so a blocked reader cannot starve discovery/close.
+            with self._using() as handle:
+                buffer = self._receive_buffer
+                remaining = max(0, int(math.ceil((deadline-time.monotonic())*1000))) if milliseconds else 0
+                size = self._lib.osdds_take(handle, buffer, len(buffer), remaining)
+                if size < 0:
+                    raise RuntimeError(self._error())
+                # buffer.raw would copy the entire1MiB before slicing. Copy
+                # only the returned sample while the buffer is still owned.
+                payload = ctypes.string_at(buffer, size) if size else None
+            return json.loads(payload) if payload is not None else None
+        finally:
+            self._take_lock.release()
 
     def matches(self):
         with self._using() as handle:
@@ -136,5 +173,6 @@ class DdsEndpoint:
             self._handle = None
             while self._inflight:
                 self._lifetime.wait()
+            self._receive_buffer = None
         if handle:
             self._lib.osdds_close(handle)

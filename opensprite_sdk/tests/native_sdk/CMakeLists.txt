@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(opensprite_installed_sdk_test LANGUAGES CXX)
+find_package(OpenSpriteSDK CONFIG REQUIRED)
+add_executable(typed_peer typed_peer.cpp)
+target_compile_features(typed_peer PRIVATE cxx_std_17)
+target_compile_options(typed_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(typed_peer PRIVATE OpenSpriteSDK::dds)

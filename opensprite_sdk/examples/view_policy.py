@@ -16,6 +16,7 @@ from opensprite_sdk.client import LowLevelClient
 from opensprite_sdk.core.channel import ChannelFactoryInitialize
 from opensprite_sdk.policy import PolicyBundle, quaternion_matrix
 from opensprite_sdk.service import BackendService
+from opensprite_sdk.visualization import passive_viewer
 
 
 class SimulationSession:
@@ -98,7 +99,7 @@ def run(args):
     paused=args.paused
     try:
         session.start()
-        with mujoco.viewer.launch_passive(session.backend.model,session.backend.data,
+        with passive_viewer(session.backend.model,session.backend.data,
                 key_callback=keys.put,show_left_ui=False,show_right_ui=False) as viewer:
             with viewer.lock():
                 viewer.cam.distance=2.1

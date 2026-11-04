@@ -6,7 +6,7 @@
 
 `legacy_v4` 保留 v4 刚体模型、31关节顺序、关节约束和训练用 PD 参数。物理步长为5ms，策略周期为20ms，solver iterations/ls_iterations为50/25。一阶力矩迟滞为零。命令延迟为0/1个物理tick，保持概率0.9，每4tick刷新，随机相位和种子明确记录。CPU NumPy 与训练用 GPU RNG 不保证逐随机数一致；相同 CPU 种子的运行可以复现。
 
-`runtime_timing_v4` 是独立实验 profile。它使用2ms物理步长和pelvis IMU，保留旧版刚体惯量和effort。它不代表换装J4340P后的真实机器人，也不自动接收旧模型的部署指令。
+`runtime_timing_v4` 是独立实验 profile。它保留pelvis IMU与旧版刚体惯量和effort；0.3版本按用户要求使用5ms物理步长，2ms仅表示独立的关节命令下发周期。它不代表换装J4340P后的真实机器人，也不自动接收旧模型的部署指令。
 
 ## 公共接口
 

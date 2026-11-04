@@ -1,6 +1,8 @@
 // OpenSprite typed Fast DDS adapter. SPDX-License-Identifier: AGPL-3.0-only
 #include "OpenSpritePubSubTypes.h"
 #include "wire_json.hpp"
+#include "wire_validation.hpp"
+#include <opensprite_sdk/core/typed_endpoint.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -137,7 +139,7 @@ struct EndpointBase {
 };
 
 template<class T, class Support>
-class Endpoint final : public EndpointBase {
+class Endpoint final : public EndpointBase, public opensprite_sdk::TypedEndpoint<T> {
     std::shared_ptr<Context> context_;
     std::string message_type_;
     fdds::Topic* topic_ = nullptr;
@@ -162,10 +164,12 @@ class Endpoint final : public EndpointBase {
 
 public:
     Endpoint(unsigned domain, const std::string& interface, const std::string& topic,
-             const std::string& message_type, const std::string& role)
+             const std::string& message_type, const std::string& role, unsigned reader_history=1)
         : context_(context(domain, interface)), message_type_(message_type) {
         std::lock_guard<std::mutex> lock(context_->mutex);
         try {
+            if (reader_history<1 || reader_history>64 || (role=="publisher" && reader_history!=1))
+                throw std::invalid_argument("subscriber history must be in1..64; publisher history is1");
             const auto type_name = context_->template register_type<Support>();
             topic_ = context_->acquire_topic(topic, type_name);
             const bool management = message_type == "ControlRequest_" || message_type == "ControlReply_";
@@ -190,12 +194,20 @@ public:
                 if (!subscriber_) throw std::runtime_error("Fast DDS subscriber creation failed");
                 fdds::DataReaderQos qos;
                 qos.history().kind = fdds::KEEP_LAST_HISTORY_QOS;
-                qos.history().depth = 1;
+                // Default remains latest1. Timed observation consumers may
+                // explicitly retain a bounded chronological receive history.
+                const auto samples = std::max<unsigned>(8,reader_history);
+                qos.history().depth = static_cast<std::int32_t>(reader_history);
+                // Fast DDS Data-sharing loans the writer's history and couples
+                // reader retention to writer depth1. A history reader needs
+                // its own transport copies; disabling built-in transports alone
+                // does not disable Data-sharing delivery.
+                if (reader_history>1) qos.data_sharing().off();
                 qos.durability().kind = fdds::VOLATILE_DURABILITY_QOS;
                 qos.reliability().kind = management ? fdds::RELIABLE_RELIABILITY_QOS : fdds::BEST_EFFORT_RELIABILITY_QOS;
-                qos.resource_limits().max_samples = 8;
+                qos.resource_limits().max_samples = samples;
                 qos.resource_limits().max_instances = 1;
-                qos.resource_limits().max_samples_per_instance = 8;
+                qos.resource_limits().max_samples_per_instance = samples;
                 qos.resource_limits().allocated_samples = 1;
                 qos.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
                 reader_ = subscriber_->create_datareader(topic_, qos);
@@ -214,26 +226,43 @@ public:
         if (!envelope.is_object() || envelope.size() != 3 || envelope.at("schema") != 1 || envelope.at("type") != message_type_)
             throw std::invalid_argument("invalid SDK message envelope");
         T typed = envelope.at("data").get<T>();
+        Write(typed);
+    }
+
+    void Write(const T& message) override {
+        if (!writer_) throw std::runtime_error("endpoint is not a publisher");
+        wire::validate_wire(message);
+        T typed = message;
         // Fast DDS 2.x's single-argument convenience overload returns bool.
         if (!writer_->write(&typed)) throw std::runtime_error("Fast DDS write failed or exceeded bounded blocking time");
     }
 
     std::string take(unsigned timeout_ms) override {
+        T typed;
+        return Take(typed, timeout_ms)
+            ? Json{{"schema", 1}, {"type", message_type_}, {"data", typed}}.dump() : std::string{};
+    }
+
+    bool Take(T& typed, unsigned timeout_ms) override {
+        if (timeout_ms > 10000) throw std::invalid_argument("DDS take timeout exceeds10 seconds");
         if (!reader_) throw std::runtime_error("endpoint is not a subscriber");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
         do {
-            T typed;
             fdds::SampleInfo info;
             const auto result = reader_->take_next_sample(&typed, &info);
-            if (result == Return::RETCODE_OK && info.valid_data)
-                return Json{{"schema", 1}, {"type", message_type_}, {"data", typed}}.dump();
+            if (result == Return::RETCODE_OK && info.valid_data) {
+                wire::validate_wire(typed);
+                return true;
+            }
             if (result != Return::RETCODE_OK && result != Return::RETCODE_NO_DATA)
                 throw std::runtime_error("Fast DDS take failed");
             if (std::chrono::steady_clock::now() >= deadline) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         } while (true);
-        return {};
+        return false;
     }
+
+    int MatchedCount() override { return matches(); }
 
     int matches() override {
         if (writer_) {
@@ -250,16 +279,46 @@ public:
 };
 } // namespace
 
+namespace opensprite_sdk { namespace detail {
+#define OPENSPRITE_TYPED_FACTORY(TYPE) \
+template<> std::shared_ptr<TypedEndpoint<msg::TYPE>> CreateEndpointImpl<msg::TYPE>( \
+    unsigned domain, const std::string& interface, const std::string& topic, const std::string& role) { \
+    if (domain>232 || topic.empty() || topic.size()>128 || topic.find('\0')!=std::string::npos) \
+        throw std::invalid_argument("invalid typed DDS endpoint arguments"); \
+    return std::make_shared<Endpoint<wire::TYPE, wire::TYPE##PubSubType>>( \
+        domain, interface, topic, #TYPE "_", role); \
+}
+OPENSPRITE_TYPED_FACTORY(LowCmd)
+OPENSPRITE_TYPED_FACTORY(LowState)
+OPENSPRITE_TYPED_FACTORY(ControlRequest)
+OPENSPRITE_TYPED_FACTORY(ControlReply)
+#undef OPENSPRITE_TYPED_FACTORY
+#define OPENSPRITE_HISTORY_FACTORY(TYPE) \
+template<> std::shared_ptr<TypedEndpoint<msg::TYPE>> CreateEndpointWithHistoryImpl<msg::TYPE>( \
+    unsigned domain, const std::string& interface, const std::string& topic, const std::string& role, \
+    unsigned reader_history) { \
+    if (domain>232 || topic.empty() || topic.size()>128 || topic.find('\0')!=std::string::npos) \
+        throw std::invalid_argument("invalid typed DDS endpoint arguments"); \
+    return std::make_shared<Endpoint<wire::TYPE, wire::TYPE##PubSubType>>( \
+        domain, interface, topic, #TYPE "_", role, reader_history); \
+}
+OPENSPRITE_HISTORY_FACTORY(LowCmd)
+OPENSPRITE_HISTORY_FACTORY(LowState)
+OPENSPRITE_HISTORY_FACTORY(ControlRequest)
+OPENSPRITE_HISTORY_FACTORY(ControlReply)
+#undef OPENSPRITE_HISTORY_FACTORY
+}} // namespace opensprite_sdk::detail
+
 #define API extern "C" __attribute__((visibility("default")))
 API const char* osdds_error() { return last_error.c_str(); }
-API void* osdds_open(unsigned domain, const char* interface, const char* topic,
-                     const char* message_type, const char* role) {
+API void* osdds_open_with_history(unsigned domain, const char* interface, const char* topic,
+                     const char* message_type, const char* role, unsigned reader_history) {
     try {
         if (domain > 232 || !topic || !message_type || !role) throw std::invalid_argument("invalid endpoint arguments");
         const std::string type(message_type), name(topic), iface(interface ? interface : "lo");
         if (name.empty() || name.size() > 128) throw std::invalid_argument("invalid topic length");
         last_error.clear();
-#define MAKE(TYPE) if (type == #TYPE "_") return new Endpoint<wire::TYPE, wire::TYPE##PubSubType>(domain, iface, name, type, role)
+#define MAKE(TYPE) if (type == #TYPE "_") return new Endpoint<wire::TYPE, wire::TYPE##PubSubType>(domain, iface, name, type, role, reader_history)
         MAKE(LowCmd);
         MAKE(LowState);
         MAKE(ControlRequest);
@@ -267,6 +326,10 @@ API void* osdds_open(unsigned domain, const char* interface, const char* topic,
 #undef MAKE
         throw std::invalid_argument("unsupported OpenSprite DDS message type");
     } catch (const std::exception& e) { last_error = e.what(); return nullptr; }
+}
+API void* osdds_open(unsigned domain, const char* interface, const char* topic,
+                     const char* message_type, const char* role) {
+    return osdds_open_with_history(domain,interface,topic,message_type,role,1);
 }
 API int osdds_write(void* handle, const char* payload, size_t size) {
     try {

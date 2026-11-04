@@ -22,12 +22,13 @@ def joint_command(state, positions, kp, kd, *, velocities=None, torques=None):
 
 
 class LowLevelClient:
-    def __init__(self):
+    def __init__(self, *, state_queue_len=1):
         self.publisher = ChannelPublisher(LOWCMD, LowCmd_)
         self.subscriber = ChannelSubscriber(LOWSTATE, LowState_)
+        self.state_queue_len = state_queue_len
 
     def Init(self):
-        self.subscriber.Init(queueLen=1)
+        self.subscriber.Init(queueLen=self.state_queue_len)
         try:
             self.publisher.Init()
         except BaseException:

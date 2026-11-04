@@ -68,6 +68,10 @@ class HardwareConfig:
             raise ValueError('native aggregate state maximum age may not exceed 60 ms')
         if data.get('controller',{}).get('native_target_timeout_ms',100)!=100:
             raise ValueError('native target watchdog is fixed at 100 ms')
+        for rate in ('joint_execution_hz','native_state_hz'):
+            value=data.get('controller',{}).get(rate,500)
+            if type(value) is not int or value!=500:
+                raise ValueError(f'{rate}: all-body hardware rate must be500Hz')
         records=data.get('motor_map',{})
         if len(records)!=31:
             raise ValueError('31 physical motor records required')
@@ -167,6 +171,7 @@ class HardwareConfig:
         return self.inverse.T@np.asarray(torque)
 
     def generate(self,directory):
+        self.can_wire_budget()
         directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
         interfaces=self.data['can_adapter']['interfaces'];ankles=set()
         for label in ('left_ankle','right_ankle'):
@@ -174,7 +179,7 @@ class HardwareConfig:
         rows=[]
         for name in self.motor_names:
             m=self.data['motor_map'][name];r=m['mit_ranges'];temperature=m['temperature_limit_c']
-            row=dict(zip(NATIVE_FIELDS,[name,interfaces[m['can_channel']],m['can_id'],m['master_id'],*r['position_rad'],*r['velocity_rad_s'],*r['torque_nm'],*m['soft_limit_rad'],*m['hard_limit_rad'],m['max_speed_rad_s'],m['rated_torque_nm'],m['peak_torque_nm'],m['commissioning_torque_cap_nm'],m['feedback_torque_cap_nm'],temperature,temperature,min(.9*temperature,90),min(.9*temperature,80),2.0,500 if name in ankles else 50]))
+            row=dict(zip(NATIVE_FIELDS,[name,interfaces[m['can_channel']],m['can_id'],m['master_id'],*r['position_rad'],*r['velocity_rad_s'],*r['torque_nm'],*m['soft_limit_rad'],*m['hard_limit_rad'],m['max_speed_rad_s'],m['rated_torque_nm'],m['peak_torque_nm'],m['commissioning_torque_cap_nm'],m['feedback_torque_cap_nm'],temperature,temperature,min(.9*temperature,90),min(.9*temperature,80),2.0,500]))
             rows.append(row)
         def write(name,fields,rows):
             path=directory/name
@@ -194,6 +199,27 @@ class HardwareConfig:
             rows.append(dict(zip(JOINT_FIELDS,(name,*lim['position_rad'],lim['velocity_rad_s'],lim['kp'],lim['kd'],lim['effort_nm']))))
         safety=write('joint-safety.tsv',JOINT_FIELDS,rows)
         return {'motors':str(motors),'kinematics':str(kinematics),'joint_safety':str(safety)}
+
+    def can_wire_budget(self):
+        """Conservative FD+BRS model; the native driver checks actual link data."""
+        adapter=self.data['can_adapter']
+        arbitration=number(adapter.get('arbitration_bitrate',1_000_000),'CAN arbitration bitrate',positive=True)
+        data=number(adapter.get('data_bitrate',5_000_000),'CAN data bitrate',positive=True)
+        if data<arbitration:
+            raise ValueError('CAN data bitrate must not be below arbitration bitrate')
+        frame=64/arbitration+128/data
+        result=[]
+        for channel,interface in enumerate(adapter['interfaces']):
+            motors=sum(m['can_channel']==channel for m in self.data['motor_map'].values())
+            utilization=motors*500*2*frame
+            slot=((motors+3)//4)*2*frame
+            if not 0<motors<=8 or utilization>.8 or slot>.0004:
+                raise ValueError(f'{interface}: all-body500Hz CAN FD budget exceeds80%')
+            result.append(dict(interface=interface,motors=motors,execution_hz=500,
+                frames_per_second=motors*1000,utilization=utilization,
+                worst_slot_seconds=slot,arbitration_bitrate=arbitration,data_bitrate=data,
+                hardware_measured=False))
+        return result
 
     def launch_command(self,directory,*,actuate=False,acknowledge=False):
         if actuate and self.data.get('synthetic'):

@@ -190,15 +190,36 @@ def test_dds_domain_isolation_has_positive_delivery_control():
 @pytest.mark.skipif(not hasattr(signal, "SIGSTOP"), reason="requires POSIX process suspension")
 def test_paused_dds_reader_does_not_block_publisher_or_healthy_reader():
     dds_domain, channel = domain(), topic()
-    child = start_reader(dds_domain, channel, "LowState_")
-    os.kill(child.pid, signal.SIGSTOP)
+    holding_reader = r"""
+import sys,time
+from opensprite_sdk.core.dds import DdsEndpoint
+reader=DdsEndpoint(int(sys.argv[1]),"lo",sys.argv[2],"LowState_","subscriber")
+print("ready",flush=True)
+assert reader.take(5.) is not None
+print("matched-and-received",flush=True)
+time.sleep(30.)
+"""
+    child = subprocess.Popen([sys.executable, "-u", "-c", holding_reader, str(dds_domain), channel],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert select.select([child.stdout], [], [], 5.)[0]
+    assert child.stdout.readline().strip() == "ready"
     ChannelFactoryInitialize(dds_domain, interface="lo", transport="dds")
     healthy = ChannelSubscriber(channel, messages.LowState_)
     healthy.Init()
     publisher = ChannelPublisher(channel, messages.LowState_)
     publisher.Init()
     try:
-        # Complete discovery before measuring a sustained stopped-reader burst.
+        # Confirm both readers matched and the soon-paused reader received a
+        # sample. Stopping it before discovery would not exercise Data-sharing
+        # coupling between a writer pool and its matched reader history.
+        deadline = time.monotonic() + 5
+        while publisher.MatchedCount() < 2:
+            assert time.monotonic() < deadline
+            time.sleep(.005)
+        publisher.Write(messages.LowState_())
+        assert select.select([child.stdout], [], [], 3.)[0]
+        assert child.stdout.readline().strip() == "matched-and-received"
+        os.kill(child.pid, signal.SIGSTOP)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             publisher.Write(messages.LowState_(), timeout=.1)

@@ -31,6 +31,7 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include "../src/can_schedule.hpp"
 
 namespace {
 
@@ -197,6 +198,9 @@ struct IpcSocket {
   int server_fd = -1;
   int client_fd = -1;
   std::uint64_t state_sequence = 0;
+  std::deque<std::pair<std::uint64_t,std::int64_t>> published_sources;
+  std::int64_t first_state_ns = 0;
+  std::size_t active_state_count = 0, fresh_target_state_count = 0;
   std::uint64_t last_target_sequence = 0;
   std::int64_t last_target_ns = 0;
   std::size_t target_count = 0;
@@ -345,7 +349,8 @@ std::vector<Motor> load_motors(const std::string& path) {
     motor.filtered_mos_temperature_limit = number(fields[21]);
     motor.filtered_rotor_temperature_limit = number(fields[22]);
     motor.temperature_filter_time_constant_s = number(fields[23]);
-    motor.poll_rate_hz = static_cast<int>(number(fields[24]));
+    if (number(fields[24]) != 500.) throw std::runtime_error("all31 motors require500Hz execution");
+    motor.poll_rate_hz = 500;
     if (motor.can_id < 1 || motor.can_id > 8 || motor.master_id != motor.can_id + 0x10 ||
         motor.position_min >= motor.soft_position_min ||
         motor.soft_position_min >= motor.soft_position_max ||
@@ -375,20 +380,11 @@ std::vector<Motor> load_motors(const std::string& path) {
   if (motors.size() != 31) {
     throw std::runtime_error("native motor config must contain 31 motors");
   }
-  std::map<std::string, int> next_ankle_phase;
-  std::map<std::string, int> next_other_phase;
+  std::map<std::string, int> next_phase;
   for (auto& motor : motors) {
-    if (motor.poll_rate_hz == 500) {
-      motor.poll_phase = 2 * next_ankle_phase[motor.interface]++;
-      if (motor.poll_phase >= 4) {
-        throw std::runtime_error("more than two 500 Hz motors configured on one CAN bus");
-      }
-    } else {
-      motor.poll_phase = 1 + 2 * next_other_phase[motor.interface]++;
-      if (motor.poll_phase >= 40) {
-        throw std::runtime_error("too many 50 Hz motors for one 40-slot CAN schedule");
-      }
-    }
+    const int ordinal=next_phase[motor.interface]++;
+    if(ordinal>=8)throw std::runtime_error("at most8 motors per500Hz CAN bus");
+    motor.poll_phase=ordinal%4;
   }
   return motors;
 }
@@ -788,6 +784,15 @@ void send_state_packet(IpcSocket& ipc, const std::vector<Motor>& motors,
   if (sent != static_cast<ssize_t>(sizeof(packet))) {
     throw std::runtime_error("failed to publish native state IPC packet");
   }
+  if(!ipc.first_state_ns)ipc.first_state_ns=now_ns;
+  ipc.published_sources.emplace_back(packet.sequence,now_ns);
+  while(!ipc.published_sources.empty() && (ipc.published_sources.size()>64 ||
+        now_ns-ipc.published_sources.front().second>60'000'000LL))ipc.published_sources.pop_front();
+  if(ipc.has_target) {
+    ++ipc.active_state_count;
+    if(now_ns>=ipc.last_target_ns && now_ns-ipc.last_target_ns<=kTargetTimeoutNs)
+      ++ipc.fresh_target_state_count;
+  }
 }
 
 void drain_target_packets(IpcSocket& ipc, std::uint64_t policy_joint_hash,
@@ -809,10 +814,13 @@ void drain_target_packets(IpcSocket& ipc, std::uint64_t policy_joint_hash,
         packet.kind != kTargetKind || packet.joint_order_hash != policy_joint_hash) {
       throw std::runtime_error("policy IPC target ABI/order invariant failed");
     }
+    const auto source=std::find_if(ipc.published_sources.begin(),ipc.published_sources.end(),
+        [&](const auto& entry){return entry.first==packet.source_state_sequence;});
     if (packet.sequence <= ipc.last_target_sequence ||
         packet.source_state_sequence == 0 ||
         packet.source_state_sequence > ipc.state_sequence ||
-        ipc.state_sequence - packet.source_state_sequence > 5) {
+        source==ipc.published_sources.end() || source->second>now_ns ||
+        now_ns-source->second>60'000'000LL) {
       throw std::runtime_error("policy IPC target sequence invariant failed");
     }
     const std::int64_t age_ns = now_ns - packet.monotonic_ns;
@@ -897,7 +905,6 @@ void preview_final_motor_commands(std::vector<Motor>& motors, IpcSocket& ipc,
     joint_torque[joint] = std::clamp(
         raw, -kinematics.joint_effort_limit[joint], kinematics.joint_effort_limit[joint]);
   }
-  const bool update_other_motors = ipc.motor_preview_count % 10 == 0;
   for (std::size_t motor_index = 0; motor_index < kJointCount; ++motor_index) {
     auto& motor = motors[motor_index];
     const bool ankle = motor.name.find("ankle_motor") != std::string::npos;
@@ -914,7 +921,7 @@ void preview_final_motor_commands(std::vector<Motor>& motors, IpcSocket& ipc,
         }
       }
       motor.preview_initialized = true;
-    } else if (update_other_motors) {
+    } else {
       motor.preview_position = desired_motor_position[motor_index];
       motor.preview_velocity = desired_motor_velocity[motor_index];
       motor.preview_kp = 0.0;
@@ -1238,7 +1245,7 @@ void drain_hold_feedback(
       if (expected_status < 0 && ++drained > 256) {
         throw std::runtime_error("shutdown CAN-FD drain budget exceeded for " + can_socket.interface);
       }
-      if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
+      if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0 || (frame.can_id & (CAN_EFF_FLAG|CAN_RTR_FLAG|CAN_ERR_FLAG)) != 0) {
         throw std::runtime_error("invalid measured-hold CAN-FD feedback frame");
       }
       const int frame_id = static_cast<int>(frame.can_id & CAN_SFF_MASK);
@@ -1377,7 +1384,7 @@ void drain_policy_feedback(
       if (expected_status < 0 && ++drained > 256) {
         throw std::runtime_error("shutdown CAN-FD drain budget exceeded for " + can_socket.interface);
       }
-      if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
+      if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0 || (frame.can_id & (CAN_EFF_FLAG|CAN_RTR_FLAG|CAN_ERR_FLAG)) != 0) {
         // A bus fault can leave stale or malformed frames queued while shutting
         // down. Keep polling for a valid disabled reply from every endpoint.
         if (expected_status < 0) continue;
@@ -1511,9 +1518,7 @@ std::string best_effort_disable(
       record(error.what());
     }
     for (auto& motor : motors) {
-      const bool due = motor.poll_rate_hz == 500
-          ? static_cast<int>(slot % 4) == motor.poll_phase
-          : static_cast<int>(slot % 40) == motor.poll_phase;
+      const bool due = opensprite_can::Due(slot, motor.poll_phase);
       if (!due) continue;
       try {
         send_poll(sockets.at(socket_index.at(motor.interface)), motor);
@@ -1549,9 +1554,7 @@ int run_native_measured_pose_hold(
   std::vector<std::size_t> active_tx(kJointCount, 0);
   std::vector<std::size_t> active_rx(kJointCount, 0);
   auto due = [](const Motor& motor, std::size_t slot) {
-    return motor.poll_rate_hz == 500
-        ? static_cast<int>(slot % 4) == motor.poll_phase
-        : static_cast<int>(slot % 40) == motor.poll_phase;
+    return opensprite_can::Due(slot, motor.poll_phase);
   };
   auto sleep_until = [](std::int64_t deadline_ns) {
     const timespec deadline = from_ns(deadline_ns);
@@ -1758,9 +1761,7 @@ int run_native_protected_policy(
   std::vector<std::size_t> active_tx(kJointCount, 0);
   std::vector<std::size_t> active_rx(kJointCount, 0);
   auto due = [](const Motor& motor, std::size_t slot) {
-    return motor.poll_rate_hz == 500
-        ? static_cast<int>(slot % 4) == motor.poll_phase
-        : static_cast<int>(slot % 40) == motor.poll_phase;
+    return opensprite_can::Due(slot, motor.poll_phase);
   };
   auto sleep_until = [](std::int64_t deadline_ns) {
     const timespec deadline = from_ns(deadline_ns);
@@ -1791,7 +1792,7 @@ int run_native_protected_policy(
       }
       drain_policy_feedback(sockets, motors, feedback_map, 0, false);
       drain_target_packets(ipc, options.policy_joint_hash, joint_safety, monotonic_ns(), true);
-      if (slot % 40 == 39 && all_seen()) {
+      if (slot % 4 == 3 && all_seen()) {
         send_state_packet(ipc, motors, motor_hash, monotonic_ns());
       }
       if (!ipc.has_target || !all_seen()) continue;
@@ -1912,7 +1913,7 @@ int run_native_protected_policy(
           }
         }
       }
-      if (slot % 40 == 39 && all_seen()) {
+      if (slot % 4 == 3 && all_seen()) {
         send_state_packet(ipc, motors, motor_hash, monotonic_ns());
       }
     }
@@ -2097,8 +2098,8 @@ std::string json_report(const std::vector<Motor>& motors, const std::vector<doub
     preview_estimated_torque_max = std::max(
         preview_estimated_torque_max, motor.preview_maximum_abs_estimated_torque);
   }
-  const double target_coverage = ipc_enabled && ipc->state_sequence > 0
-      ? static_cast<double>(ipc->target_count) / static_cast<double>(ipc->state_sequence)
+  const double target_coverage = ipc_enabled && ipc->active_state_count > 0
+      ? static_cast<double>(ipc->fresh_target_state_count) / static_cast<double>(ipc->active_state_count)
       : 0.0;
   const double final_target_age_ms = ipc_enabled && ipc->last_target_ns > 0
       ? static_cast<double>(finished_ns - ipc->last_target_ns) / 1.0e6
@@ -2183,6 +2184,9 @@ int main(int argc, char** argv) {
       }
     }
     std::map<std::string, std::size_t> socket_index;
+    std::map<std::string,unsigned> populations;
+    for(const auto& motor:motors)++populations[motor.interface];
+    for(const auto& item:populations)(void)opensprite_can::CheckLink(item.first,item.second);
     for (const auto& motor : motors) {
       if (socket_index.count(motor.interface) == 0) {
         socket_index[motor.interface] = sockets.size();
@@ -2244,9 +2248,7 @@ int main(int argc, char** argv) {
         deadline_misses += static_cast<std::size_t>(woke_ns - deadline_ns >= 2'000'000LL);
       }
       for (auto& motor : motors) {
-        const bool due = motor.poll_rate_hz == 500
-            ? static_cast<int>(slot % 4) == motor.poll_phase
-            : static_cast<int>(slot % 40) == motor.poll_phase;
+        const bool due = opensprite_can::Due(slot, motor.poll_phase);
         if (due) {
           send_poll(sockets[socket_index.at(motor.interface)], motor);
         }
@@ -2256,7 +2258,7 @@ int main(int argc, char** argv) {
           canfd_frame frame{};
           const ssize_t received = read(can_socket.fd, &frame, CANFD_MTU);
           if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-          if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
+          if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0 || (frame.can_id & (CAN_EFF_FLAG|CAN_RTR_FLAG|CAN_ERR_FLAG)) != 0) {
             throw std::runtime_error("invalid CAN-FD feedback frame");
           }
           const int can_id = static_cast<int>(frame.can_id & CAN_SFF_MASK);
@@ -2294,9 +2296,7 @@ int main(int argc, char** argv) {
         if (ipc.has_target && ipc.motor_preview_count > 0) {
           std::array<bool, kJointCount> due_this_slot{};
           for (std::size_t index = 0; index < motors.size(); ++index) {
-            due_this_slot[index] = motors[index].poll_rate_hz == 500
-                ? static_cast<int>(slot % 4) == motors[index].poll_phase
-                : static_cast<int>(slot % 40) == motors[index].poll_phase;
+            due_this_slot[index] = opensprite_can::Due(slot, motors[index].poll_phase);
           }
           // Exercise the same staggered, quantized policy path as actuation.
           // These are virtual held commands only; CAN still sends zero-gain polls.
@@ -2308,10 +2308,10 @@ int main(int argc, char** argv) {
             motors[index].last_policy_payload_valid = true;
           }
         }
-        if (slot % 40 == 39 &&
+        if (slot % 4 == 3 &&
             std::all_of(motors.begin(), motors.end(), [](const Motor& motor) { return motor.seen; })) {
           send_state_packet(ipc, motors, motor_hash, monotonic_ns());
-          if (ipc.target_count == 0 && ipc.state_sequence >= 5) {
+          if (ipc.target_count == 0 && ipc.first_state_ns>0 && monotonic_ns()-ipc.first_state_ns>=3'000'000'000LL) {
             throw std::runtime_error("policy IPC initial target watchdog expired");
           }
           if (ipc.last_target_ns > 0 && monotonic_ns() - ipc.last_target_ns > kTargetTimeoutNs) {
@@ -2327,7 +2327,7 @@ int main(int argc, char** argv) {
         canfd_frame frame{};
         const ssize_t received = read(can_socket.fd, &frame, CANFD_MTU);
         if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-        if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0) {
+        if (received != CANFD_MTU || frame.len != 8 || (frame.flags & CANFD_BRS) == 0 || (frame.can_id & (CAN_EFF_FLAG|CAN_RTR_FLAG|CAN_ERR_FLAG)) != 0) {
           throw std::runtime_error("invalid final CAN-FD feedback frame");
         }
         const int can_id = static_cast<int>(frame.can_id & CAN_SFF_MASK);

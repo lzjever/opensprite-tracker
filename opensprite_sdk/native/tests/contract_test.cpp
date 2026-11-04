@@ -295,6 +295,28 @@ int main(int argc, char** argv) {
   assert(send(fds[1],&future_target,sizeof(future_target),0)==sizeof(future_target));
   assert(rejects([&]{drain_target_packets(ipc,456,{},1'005'000'000LL);}));
   assert(ipc.target_count==2);
+  // At500Hz a normal50Hz controller legitimately references >5 older states.
+  // Trust emitted sequence+time, not a rate-dependent frame-count allowance.
+  for(int i=0;i<20;++i) {
+    send_state_packet(ipc,motors,123,1'005'000'000LL);
+    StatePacket observed{};assert(recv(fds[1],&observed,sizeof(observed),0)==sizeof(observed));
+  }
+  TargetPacket historical=first;historical.sequence=5;historical.source_state_sequence=1;
+  assert(send(fds[1],&historical,sizeof(historical),0)==sizeof(historical));
+  drain_target_packets(ipc,456,{},1'005'000'000LL);
+  assert(ipc.target_count==3);
+  historical.sequence=6;historical.monotonic_ns=1'066'000'000LL;
+  assert(send(fds[1],&historical,sizeof(historical),0)==sizeof(historical));
+  assert(rejects([&]{drain_target_packets(ipc,456,{},1'066'000'000LL);}));
+  {
+    PolicyFixture fullbody;
+    fullbody.ipc.latest_target.position_rad[0]=.01;
+    fullbody.ipc.latest_target.kp[0]=1;
+    preview_final_motor_commands(fullbody.motors,fullbody.ipc,fullbody.kinematics);
+    fullbody.ipc.latest_target.position_rad[0]=.02;
+    preview_final_motor_commands(fullbody.motors,fullbody.ipc,fullbody.kinematics);
+    assert(fullbody.motors[0].preview_position==.02);
+  }
   if(argc>=2) {
     std::ofstream output(argv[1],std::ios::binary);
     output.write(reinterpret_cast<const char*>(&packet),sizeof(packet));
@@ -316,6 +338,27 @@ int main(int argc, char** argv) {
     const auto limits=load_joint_safety(argv[4]);
     assert(loaded.size()==31 && limits.size()==31);
     assert(!map.joint_names[0].empty());
+    std::map<std::string,std::array<int,4>> per_bus;
+    for(const auto& motor:loaded) {
+      assert(motor.poll_rate_hz==500 && motor.poll_phase>=0 && motor.poll_phase<4);
+      int count=0;
+      for(std::size_t slot=0;slot<2000;++slot)count+=opensprite_can::Due(slot,motor.poll_phase);
+      assert(count==500);
+      ++per_bus[motor.interface][motor.poll_phase];
+    }
+    assert(per_bus.size()==4);
+    for(const auto& bus:per_bus)for(int count:bus.second)assert(count<=2);
+    const auto budget=opensprite_can::CheckBudget(8,1'000'000,5'000'000);
+    assert(std::abs(budget.utilization-.7168)<1e-12);
+    assert(budget.worst_slot_seconds<.0004);
+    assert(rejects([]{opensprite_can::CheckBudget(8,1'000'000,2'000'000);}));
+    assert(rejects([]{opensprite_can::CheckBudget(8,500'000,5'000'000);}));
+    assert(rejects([]{opensprite_can::CheckLink("lo",8);}));
+    for(unsigned mode:{CAN_CTRLMODE_LISTENONLY,CAN_CTRLMODE_LOOPBACK}) {
+      opensprite_can::Link bad{1'000'000,5'000'000,CAN_CTRLMODE_FD|mode,true,true};
+      assert(rejects([&]{opensprite_can::CheckLinkConfiguration(bad,8);}));
+    }
+    std::cout<<"PASS all31 motors500Hz,balanced4slot schedule,FD wire budget andlink gate\n";
     test_full_policy_failure_cleanup(loaded,map,limits,std::string(argv[1])+".cleanup.json");
   }
   close(fds[0]);close(fds[1]);

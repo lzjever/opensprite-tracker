@@ -26,9 +26,9 @@ CONTROL_REPLY = "rt/control_reply"
 class ManagementClient:
     """Correlated, retryable management; a successful Write never means enabled."""
 
-    def __init__(self, *, controller_session=None):
+    def __init__(self, *, controller_session=None, state_queue_len=1):
         self.controller_session = controller_session or uuid.uuid4().hex
-        self.robot = LowLevelClient()
+        self.robot = LowLevelClient(state_queue_len=state_queue_len)
         self.requests = ChannelPublisher(CONTROL_REQUEST, ControlRequest_)
         self.replies = ChannelSubscriber(CONTROL_REPLY, ControlReply_)
         self.state = None
@@ -547,7 +547,8 @@ class _RuntimeViewer:
             # would still let GUI controls change the live physics model.
             model = copy(backend.model)
             data = mujoco.MjData(model)
-            with mujoco.viewer.launch_passive(model, data,
+            from .visualization import passive_viewer
+            with passive_viewer(model, data,
                     show_left_ui=False, show_right_ui=False) as handle:
                 with handle.lock():
                     handle.cam.distance = 2.1

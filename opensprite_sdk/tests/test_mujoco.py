@@ -182,7 +182,8 @@ def test_torso_imu_includes_waist_joint_motion_and_differs_from_pelvis():
         backend.reset(qvel=qvel)
         assert backend.read().imu_state.attached_link == "pelvis_link"
         np.testing.assert_allclose(backend.read().imu_state.gyroscope, [0, 0, 0], atol=1e-12)
-        assert backend.dt == .002 and backend.policy_steps == 10
+        assert backend.dt == .005 and backend.policy_steps == 4
+        assert backend.profile["joint_command_dt"] == .002
 
 
 def test_delay_is_seeded_bounded_and_applied_at_physics_rate():

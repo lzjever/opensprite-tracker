@@ -63,7 +63,49 @@ def outputs():
     cpp = ['// Generated from authoritative .msg; do not edit.', '#pragma once',
            '#include "OpenSprite.h"', '#include <nlohmann/json.hpp>', '#include <cmath>',
            '#include <cstdint>', '#include <stdexcept>', 'namespace opensprite_msgs { namespace msg {']
+    validation = ['// Generated from authoritative .msg; do not edit.', '#pragma once',
+        '#include "OpenSprite.h"', '#include <cmath>', '#include <stdexcept>',
+        '#include <string>', 'namespace opensprite_msgs { namespace msg {',
+        'template<class String> inline void validate_wire_string(const String& value, size_t bound) {',
+        '  if (value.size()>bound) throw std::invalid_argument("invalid bounded string");',
+        '  const char* bytes=value.c_str();',
+        '  for (size_t i=0; i<value.size();) {',
+        '    unsigned c=static_cast<unsigned char>(bytes[i++]), n=0, minimum=0;',
+        '    if (c==0) throw std::invalid_argument("embedded NUL in string");',
+        '    if (c<128) continue;',
+        '    if ((c&0xe0)==0xc0) {c&=0x1f;n=1;minimum=0x80;}',
+        '    else if ((c&0xf0)==0xe0) {c&=0x0f;n=2;minimum=0x800;}',
+        '    else if ((c&0xf8)==0xf0) {c&=0x07;n=3;minimum=0x10000;}',
+        '    else throw std::invalid_argument("invalid UTF-8 string");',
+        '    if (i+n>value.size()) throw std::invalid_argument("truncated UTF-8 string");',
+        '    while (n--) {unsigned b=static_cast<unsigned char>(bytes[i++]); if ((b&0xc0)!=0x80) throw std::invalid_argument("invalid UTF-8 continuation"); c=(c<<6)|(b&0x3f);}',
+        '    if (c<minimum || c>0x10ffff || (c>=0xd800 && c<=0xdfff)) throw std::invalid_argument("invalid UTF-8 scalar");',
+        '  }', '}',
+    ]
+
+    def validate_scalar(kind, value):
+        if kind.startswith("string<="):
+            return f"validate_wire_string({value}, {kind.split('<=')[1]});"
+        if kind == "float64":
+            return f'if (!std::isfinite({value})) throw std::invalid_argument("nonfinite wire value");'
+        if kind not in BASIC:
+            return f"validate_wire({value});"
+        return ""
     for name, fields in schema.items():
+        validation.append(f'inline void validate_wire(const {name}& v) {{')
+        for kind, array, field in fields:
+            value = f"v.{field}()"
+            if array:
+                if array.startswith("[<="):
+                    validation.append(f'  if ({value}.size()>{array[3:-1]}) throw std::invalid_argument("wire sequence exceeds bound");')
+                statement = validate_scalar(kind, "item")
+                if statement:
+                    validation.append(f"  for (const auto& item : {value}) {{ {statement} }}")
+            else:
+                statement = validate_scalar(kind, value)
+                if statement:
+                    validation.append("  "+statement)
+        validation.append("}")
         idl.append(f"struct {name} {{")
         for kind, array, field in fields:
             wire = BASIC.get(kind, kind)
@@ -98,8 +140,10 @@ def outputs():
         cpp.append("}")
     idl.append("}; };")
     cpp.append("}} // namespace opensprite_msgs::msg")
+    validation.append("}} // namespace opensprite_msgs::msg")
     return {ROOT / "native-dds/idl/OpenSprite.idl": "\n".join(idl) + "\n",
-            ROOT / "native-dds/src/wire_json.hpp": "\n".join(cpp) + "\n"}
+            ROOT / "native-dds/src/wire_json.hpp": "\n".join(cpp) + "\n",
+            ROOT / "native-dds/src/wire_validation.hpp": "\n".join(validation) + "\n"}
 
 
 if __name__ == "__main__":

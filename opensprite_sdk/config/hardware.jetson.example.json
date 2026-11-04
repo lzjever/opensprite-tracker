@@ -6,7 +6,9 @@
     "usb_canfd_channels": 4,
     "nominal_bus_voltage_v": 38.0,
     "native_state_max_age_ms": 60,
-    "native_target_timeout_ms": 100
+    "native_target_timeout_ms": 100,
+    "joint_execution_hz": 500,
+    "native_state_hz": 500
   },
   "can_adapter": {
     "backend": "socketcan",
@@ -23,7 +25,9 @@
       "CANFD2",
       "CANFD3",
       "CANFD4"
-    ]
+    ],
+    "arbitration_bitrate": 1000000,
+    "data_bitrate": 5000000
   },
   "imu": {
     "socket_path": null,
