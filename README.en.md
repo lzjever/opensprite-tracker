@@ -8,11 +8,15 @@ The current task is the complete LAFAN dance **`dance2_subject1`**: **11,284 sta
 
 ## Demo and checkpoints
 
-[![goal-sim2real model24000 dance preview](docs/media/goal-sim2real-model024000-preview.gif)](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
+[![Complete goal-sim2real model24000 dance; click for the 1080p video](docs/media/goal-sim2real-model024000-preview.gif)](https://media.githubusercontent.com/media/lzjever/opensprite-tracker/main/artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
 
-The new **`goal-sim2real / model24000`** recording is available as a [full MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4), [static poster](docs/media/goal-sim2real-model024000-poster.png), and [saved rollout](artifacts/recordings/goal-sim2real-model024000/rollout.npz). The GIF joins three four-second excerpts: **0–4 s, 192–196 s, and 221–225 s**.
+**[▶ Complete dance video (1080p / 50 FPS, 225.68 seconds)](https://media.githubusercontent.com/media/lzjever/opensprite-tracker/main/artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)**
 
-Seed 42, one robot: first tracking failure occurs at **193.76 s**. The same actor continues real simulation to **225.66 s**, without reset, reference wrapping or failure freeze. **The full video does not mean complete tracking success.** It contains **11,284 frames at 1080p/50 FPS**, with a **225.68 s** container duration because the final recorded state also occupies a video frame.
+The recording uses **`goal-sim2real / model24000`**. The GIF shows the entire run at its original speed without cuts, with reduced resolution and frame rate. Click it for the full HD video. [Download MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4) · [Saved rollout](artifacts/recordings/goal-sim2real-model024000/rollout.npz).
+
+Seed 42, one robot: first tracking failure occurs at 193.76 s. The same actor continues real simulation to 225.66 s without reset, reference wrapping or freezing. The video contains 11,284 frames and lasts 225.68 s, including the final recorded state.
+
+[▶ Watch the complete earlier demo on Bilibili](https://b23.tv/aMs7Vw3) (`goal-sim / model18000`).
 
 | Preset | Iteration | Included artifact |
 |---|---:|---|
@@ -21,13 +25,6 @@ Seed 42, one robot: first tracking failure occurs at **193.76 s**. The same acto
 | `goal-sim` | 18,000 | [Checkpoint](artifacts/checkpoints/model_018000.pt) and [earlier video](artifacts/videos/dance-model018000-full-1080p50.mp4) |
 
 Model24000 was the latest saved checkpoint selected when the recording request was first checked. It is an intermediate snapshot, not the eight-hour final checkpoint or a claim about the currently latest training checkpoint. Checkpoints and recording results are identified separately by preset and iteration.
-
-<details>
-<summary>Earlier Bilibili recording: goal-sim / model18000</summary>
-
-[Watch goal-sim / model18000 on Bilibili](https://b23.tv/aMs7Vw3). This link shows the earlier recording, not the new goal-sim2real video.
-
-</details>
 
 ## Method and configuration
 

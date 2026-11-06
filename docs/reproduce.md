@@ -91,7 +91,7 @@ CLI每小时审查为可选工具，新配方使用[独立审查任务](plan/hou
 
 默认CLI未变：不传`--checkpoint`时，评估仍为`goal-sim/model30000`、seed42、N3；录像仍为`goal-sim/model18000`、seed42、N1。也可指定自己的模型路径。模型接口与执行器模式从checkpoint读取。
 
-新[完整MP4](../artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)、[同一快照](../artifacts/checkpoints/goal-sim2real_model_024000.pt)和[真实rollout](../artifacts/recordings/goal-sim2real-model024000/rollout.npz)均随仓库提供。[预览GIF](media/goal-sim2real-model024000-preview.gif)拼接0–4、192–196、221–225秒三个片段，[静态海报](media/goal-sim2real-model024000-poster.png)可单独查看。model24000是首次检查这次录像请求时选定的最新已保存中间快照，不是八小时最终checkpoint，也不表示当前训练仍以它为最新版本。原[B站视频](https://b23.tv/aMs7Vw3)对应`goal-sim/model18000`，不是新录像。
+新[完整MP4](../artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)、[同一快照](../artifacts/checkpoints/goal-sim2real_model_024000.pt)和[真实rollout](../artifacts/recordings/goal-sim2real-model024000/rollout.npz)均随仓库提供。[完整预览GIF](media/goal-sim2real-model024000-preview.gif)以较低分辨率和帧率原速展示全程，无剪辑；[静态海报](media/goal-sim2real-model024000-poster.png)可单独查看。model24000是首次检查这次录像请求时选定的最新已保存中间快照，不是八小时最终checkpoint，也不表示当前训练仍以它为最新版本。原[B站视频](https://b23.tv/aMs7Vw3)对应`goal-sim/model18000`，不是新录像。
 
 评估从第一帧请求全源，失败后仍以首次失败计分；录像在失败后继续真实控制至源结尾，并在HUD标注。新录像首次失败193.76秒，此后同一策略继续至225.66秒，无重置或参考循环；完整视频不代表完整跟踪成功。
 

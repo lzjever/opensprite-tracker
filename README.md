@@ -8,11 +8,15 @@
 
 ## 视频与模型
 
-[![goal-sim2real 24000轮舞蹈预览](docs/media/goal-sim2real-model024000-preview.gif)](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
+[![goal-sim2real 24000轮完整舞蹈，点击查看1080p视频](docs/media/goal-sim2real-model024000-preview.gif)](https://media.githubusercontent.com/media/lzjever/opensprite-tracker/main/artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)
 
-最新录像为 **`goal-sim2real / 24000轮`**：[完整MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)、[静态封面](docs/media/goal-sim2real-model024000-poster.png)和[原始仿真轨迹](artifacts/recordings/goal-sim2real-model024000/rollout.npz)。动图节选0–4秒、192–196秒和221–225秒，有跳剪。
+**[▶ 完整舞蹈视频（1080p / 50fps，225.68秒）](https://media.githubusercontent.com/media/lzjever/opensprite-tracker/main/artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4)**
 
-录像使用seed42、单实例，在 **193.76秒**首次判失败，之后同一策略继续真实仿真到225.66秒，没有重置、参考循环或停帧。**完整视频不代表整段跟踪成功。** 视频为1080p、50fps，共11284帧；容器时长225.68秒，包含最后一个源状态的显示时长。
+录像对应 **`goal-sim2real / 24000轮`**。上方动图从头到尾原速连续展示全程，无剪辑；动图降低了分辨率和帧率，点击即可查看完整高清视频。[下载MP4](artifacts/videos/goal-sim2real-model024000-full-1080p50.mp4) · [原始仿真轨迹](artifacts/recordings/goal-sim2real-model024000/rollout.npz)。
+
+录像使用seed42、单实例。首次跟踪失败为193.76秒，此后同一策略继续真实仿真到225.66秒，无重置、参考循环或停帧。视频共11284帧，时长225.68秒，包含最后一个源状态的显示时长。
+
+[▶ B站完整在线播放：Open sprite robot / umr / supermimic / lafan dance](https://b23.tv/aMs7Vw3)（`goal-sim / 18000轮`，原演示）。
 
 | 配方 | 轮次 | 发布内容 |
 |---|---:|---|
@@ -21,13 +25,6 @@
 | `goal-sim` | 18000 | [快照](artifacts/checkpoints/model_018000.pt)与[原演示视频](artifacts/videos/dance-model018000-full-1080p50.mp4) |
 
 24000轮是首次检查这次录像请求时选定的最新已保存中间快照，不是八小时最终模型。各快照与录像均单独标注配方和轮次。
-
-<details>
-<summary>goal-sim / 18000轮：B站完整在线播放</summary>
-
-[▶ Open sprite robot / umr / supermimic / lafan dance（哔哩哔哩）](https://b23.tv/aMs7Vw3)。这个链接对应原演示，不是上方新录的goal-sim2real视频。
-
-</details>
 
 目前高动态跟踪还不理想。**部分关节在部分时刻已经吃满力矩上限，腾空等动作还是没跟上。** 视频里也能看到世界坐标漂移。实际施加力矩受到effort限幅；未限幅的PD请求大于上限，不等于实际输出超过上限。
 
